@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: #000000;
+    color: #e2e8f0;
+  }
+  
+  code, pre, .font-mono {
+    font-family: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+}
+
+/* Watson Modern Technical Grid */
+.watson-grid-bg {
+  background-color: #000000;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.watson-card {
+  background-color: #0c0e14;
+  border: 1px solid #1c2230;
+  border-radius: 0.75rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.watson-card:hover {
+  border-color: #2b354a;
+}
+
+/* Watson Custom Technical Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #08090d;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1f2533;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #313b52;
+}
+
+/* Subtle scanline and terminal blink */
+@keyframes terminal-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.terminal-cursor {
+  animation: terminal-cursor 1s infinite;
+}
+
+/* Pulse animation for node signals */
+@keyframes wire-pulse {
+  0% { stroke-dashoffset: 24; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.wire-animated {
+  stroke-dasharray: 6 4;
+  animation: wire-pulse 1.2s linear infinite;
+}

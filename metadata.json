@@ -1,0 +1,6 @@
+{
+  "name": "WATSON Security Toolkit",
+  "description": "Plataforma moderna de investigação corporativa, inteligência de dados (CNPJ/QSA) e laboratório de segurança cibernética com design moderno Sr. Watson.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
