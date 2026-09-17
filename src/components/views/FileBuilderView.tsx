@@ -10,11 +10,17 @@ import {
   Save,
   CheckCircle2,
   Play,
-  Eye,
+  Activity,
+  Download,
   ChevronRight,
   ChevronDown,
   Terminal,
   Binary,
+  Edit2,
+  Copy,
+  AlignLeft,
+  X,
+  File,
 } from 'lucide-react';
 import { ProjectFile } from '../../types';
 
@@ -29,9 +35,10 @@ export const FileBuilderView: React.FC = () => {
     deleteFile,
     runValidation,
     runBuild,
-    runPreview,
+    runAnalysis,
+    runExport,
     activeProject,
-    activeTarget,
+    addNotification,
   } = useWatson();
 
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
@@ -42,13 +49,85 @@ export const FileBuilderView: React.FC = () => {
     'folder-output': true,
   });
 
-  const [bottomTab, setBottomTab] = useState<'build-log' | 'hex' | 'manifest'>('build-log');
   const [newFileInputOpen, setNewFileInputOpen] = useState(false);
   const [newFileName, setNewFileName] = useState('');
   const [newFileType, setNewFileType] = useState<'file' | 'folder'>('file');
 
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+
+  // Track open tabs in editor
+  const [openTabIds, setOpenTabIds] = useState<string[]>(() => {
+    return activeFile ? [activeFile.id] : [];
+  });
+
+  // Painel Inferior (Console/Output)
+  const [outputTab, setOutputTab] = useState<'build' | 'validation' | 'sandbox'>('build');
+  const [outputCollapsed, setOutputCollapsed] = useState(false);
+
   const toggleFolder = (id: string) => {
     setExpandedFolders((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleSelectFile = (file: ProjectFile) => {
+    setActiveFile(file);
+    if (!openTabIds.includes(file.id)) {
+      setOpenTabIds((prev) => [...prev, file.id]);
+    }
+  };
+
+  const handleCloseTab = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const remaining = openTabIds.filter((tabId) => tabId !== id);
+    setOpenTabIds(remaining);
+    if (activeFile?.id === id) {
+      if (remaining.length > 0) {
+        // Find file object
+        const findInTree = (nodes: ProjectFile[]): ProjectFile | null => {
+          for (const node of nodes) {
+            if (node.id === remaining[remaining.length - 1]) return node;
+            if (node.children) {
+              const res = findInTree(node.children);
+              if (res) return res;
+            }
+          }
+          return null;
+        };
+        const next = findInTree(files);
+        if (next) setActiveFile(next);
+      } else {
+        setActiveFile(null);
+      }
+    }
+  };
+
+  const handleFormatCode = () => {
+    if (!activeFile?.content) return;
+    try {
+      if (activeFile.extension === 'json') {
+        const parsed = JSON.parse(activeFile.content);
+        updateFileContent(activeFile.id, JSON.stringify(parsed, null, 2));
+        addNotification('Formatador', 'JSON formatado com sucesso.', 'success');
+      } else {
+        addNotification('Formatador', 'Identação padrão aplicada.', 'info');
+      }
+    } catch {
+      addNotification('Erro de Formatação', 'Sintaxe inválida para formatação.', 'error');
+    }
+  };
+
+  const handleCopyHash = () => {
+    if (activeFile?.checksum) {
+      navigator.clipboard.writeText(activeFile.checksum);
+      addNotification('SHA-256 Copiado', activeFile.checksum, 'info');
+    }
+  };
+
+  const handleRenameConfirm = () => {
+    if (!activeFile || !renameValue.trim()) return;
+    activeFile.name = renameValue.trim();
+    setRenameModalOpen(false);
+    addNotification('Arquivo Renomeado', `Novo nome: ${renameValue.trim()}`, 'success');
   };
 
   const renderTree = (items: ProjectFile[], depth = 0) => {
@@ -59,20 +138,20 @@ export const FileBuilderView: React.FC = () => {
           <div key={item.id} className="select-none">
             <div
               onClick={() => toggleFolder(item.id)}
-              style={{ paddingLeft: `${depth * 12 + 6}px` }}
-              className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg hover:bg-[#121824] text-zinc-400 hover:text-white cursor-pointer transition-colors text-xs font-mono"
+              style={{ paddingLeft: `${depth * 10 + 6}px` }}
+              className="flex items-center gap-1.5 py-1 px-1.5 rounded hover:bg-[#101724] text-zinc-400 hover:text-white cursor-pointer transition-colors text-xs font-mono"
             >
               {isExpanded ? (
-                <ChevronDown className="w-3.5 h-3.5 text-zinc-600" />
+                <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
               ) : (
-                <ChevronRight className="w-3.5 h-3.5 text-zinc-600" />
+                <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
               )}
               {isExpanded ? (
-                <FolderOpen className="w-4 h-4 text-amber-400" />
+                <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
               ) : (
-                <Folder className="w-4 h-4 text-amber-400/80" />
+                <Folder className="w-3.5 h-3.5 text-amber-400/80" />
               )}
-              <span className="font-medium tracking-wide">{item.name}</span>
+              <span className="font-semibold tracking-wide">{item.name}</span>
             </div>
             {isExpanded && item.children && renderTree(item.children, depth + 1)}
           </div>
@@ -89,12 +168,12 @@ export const FileBuilderView: React.FC = () => {
       return (
         <div
           key={item.id}
-          onClick={() => setActiveFile(item)}
-          style={{ paddingLeft: `${depth * 12 + 20}px` }}
-          className={`flex items-center justify-between py-1.5 px-2 rounded-lg cursor-pointer transition-colors text-xs font-mono group ${
+          onClick={() => handleSelectFile(item)}
+          style={{ paddingLeft: `${depth * 10 + 18}px` }}
+          className={`flex items-center justify-between py-1 px-2 rounded cursor-pointer transition-colors text-xs font-mono group ${
             isSelected
-              ? 'bg-[#151d2c] text-amber-300 font-semibold border-l-2 border-amber-400'
-              : 'text-zinc-400 hover:bg-[#101520] hover:text-zinc-200'
+              ? 'bg-[#121a28] text-amber-300 font-bold border-l-2 border-amber-400'
+              : 'text-zinc-400 hover:bg-[#0c1119] hover:text-zinc-200'
           }`}
         >
           <div className="flex items-center gap-2 truncate">
@@ -111,48 +190,48 @@ export const FileBuilderView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-black overflow-hidden font-sans">
-      {/* Main 3-Pane Area */}
+    <div className="flex-1 flex flex-col h-full bg-[#05070a] overflow-hidden font-mono select-none">
+      {/* 3-Pane Technical File Builder Area */}
       <div className="flex-1 flex min-h-0">
-        {/* LEFT: Project Explorer */}
-        <div className="w-64 bg-[#080b12] border-r border-[#18202f] flex flex-col shrink-0 select-none">
-          {/* Explorer Header */}
-          <div className="px-4 py-3 border-b border-[#18202f] bg-[#0c1018] flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-mono font-bold text-white tracking-wide uppercase">EXPLORADOR DE ARQUIVOS</span>
-            </div>
+        {/* PAINEL ESQUERDO: Árvore de Arquivos do Projeto */}
+        <div className="w-64 bg-[#07090e] border-r border-[#161f2e] flex flex-col shrink-0">
+          {/* Header */}
+          <div className="h-10 px-3 border-b border-[#161f2e] bg-[#090d14] flex items-center justify-between">
+            <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
+              ÁRVORE DO PROJETO
+            </span>
             <button
               onClick={() => setNewFileInputOpen(!newFileInputOpen)}
-              className="p-1.5 rounded-lg hover:bg-[#151c2a] text-zinc-400 hover:text-white transition-colors"
-              title="Adicionar Arquivo ou Pasta"
+              className="p-1 rounded bg-[#0f1420] hover:bg-[#152033] border border-amber-500/30 text-amber-400 hover:text-white transition-colors"
+              title="Novo Arquivo ou Pasta"
             >
-              <Plus className="w-3.5 h-3.5 text-amber-400" />
+              <Plus className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          {/* New file input form if toggled */}
+          {/* New file input form */}
           {newFileInputOpen && (
-            <div className="p-3 border-b border-[#18202f] bg-[#0e131d] space-y-2">
+            <div className="p-2.5 border-b border-[#161f2e] bg-[#0b0f17] space-y-2">
               <input
                 type="text"
                 value={newFileName}
                 onChange={(e) => setNewFileName(e.target.value)}
-                placeholder="nome.ext (ex: script.sh)"
-                className="w-full bg-[#07090f] border border-[#1d2638] text-xs font-mono px-3 py-1.5 text-white focus:outline-none focus:border-amber-400 rounded-xl"
+                placeholder="nome.ext (ex: payload.sh)"
+                className="w-full bg-[#07090e] border border-[#1d2738] text-xs px-2.5 py-1 text-white focus:outline-none focus:border-amber-400 rounded"
               />
-              <div className="flex items-center justify-between text-xs font-mono">
+              <div className="flex items-center justify-between text-xs">
                 <select
                   value={newFileType}
                   onChange={(e) => setNewFileType(e.target.value as any)}
-                  className="bg-[#07090f] border border-[#1d2638] text-zinc-300 px-2 py-1 rounded-lg"
+                  className="bg-[#07090e] border border-[#1d2738] text-zinc-300 px-2 py-0.5 rounded text-[11px]"
                 >
                   <option value="file">Arquivo</option>
                   <option value="folder">Pasta</option>
                 </select>
-                <div className="flex gap-1.5">
+                <div className="flex gap-1">
                   <button
                     onClick={() => setNewFileInputOpen(false)}
-                    className="px-2.5 py-1 rounded-full bg-[#151c2a] text-zinc-400 hover:text-white text-[11px]"
+                    className="px-2 py-0.5 rounded bg-[#131924] text-zinc-400 hover:text-white text-[10px]"
                   >
                     Cancelar
                   </button>
@@ -164,7 +243,7 @@ export const FileBuilderView: React.FC = () => {
                         setNewFileInputOpen(false);
                       }
                     }}
-                    className="px-3 py-1 rounded-full bg-[#f59e0b] hover:bg-[#d97706] text-black font-bold text-[11px]"
+                    className="px-2.5 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold text-[10px]"
                   >
                     Criar
                   </button>
@@ -173,302 +252,375 @@ export const FileBuilderView: React.FC = () => {
             </div>
           )}
 
-          {/* Root Directory Tree */}
+          {/* File Tree List */}
           <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-            <div className="text-[10px] font-mono text-zinc-600 uppercase px-2 py-1 tracking-wider">
-              {activeProject.name} (RAIZ)
+            <div className="text-[10px] text-zinc-500 uppercase px-2 py-1 tracking-wider">
+              {activeProject.name} (ROOT)
             </div>
             {renderTree(files)}
           </div>
 
-          {/* Quick Target Link in Explorer Footer */}
-          <div className="p-3 border-t border-[#18202f] bg-[#0c1018] text-xs font-mono text-zinc-500 flex items-center justify-between">
-            <span>Alvo Vinculado:</span>
-            <span className="text-cyan-400 font-semibold">{activeTarget.name}</span>
+          {/* Explorer footer */}
+          <div className="h-8 px-3 border-t border-[#161f2e] bg-[#080b11] text-[10px] text-zinc-500 flex items-center justify-between">
+            <span>TOTAL: {activeProject.filesCount} ARQUIVOS</span>
+            <span className="text-emerald-400">STATUS: OK</span>
           </div>
         </div>
 
-        {/* CENTER: Editor Pane */}
-        <div className="flex-1 flex flex-col min-w-0 bg-[#06080d] border-r border-[#18202f]">
-          {/* Top Bar: File, Edit, Format, Validate, Build, Preview */}
-          <div className="h-12 px-4 border-b border-[#18202f] bg-[#090c13] flex items-center justify-between select-none">
-            {/* Action Menu Strip */}
-            <div className="flex items-center gap-2 text-xs font-mono">
+        {/* PAINEL CENTRAL: Editor com Numeração de Linhas, Abas e Ações */}
+        <div className="flex-1 flex flex-col min-w-0 bg-[#06080d] border-r border-[#161f2e]">
+          {/* Action Bar do Editor: Salvar, Novo arquivo, Renomear, Excluir, Formatar */}
+          <div className="h-10 px-3 border-b border-[#161f2e] bg-[#090d14] flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => activeFile && saveFile(activeFile.id)}
-                className="px-2.5 py-1 rounded-lg text-zinc-400 hover:text-white hover:bg-[#121824] transition-colors"
+                className="px-2 py-1 rounded bg-[#0f1522] hover:bg-[#182338] border border-amber-500/30 text-amber-300 font-bold flex items-center gap-1 transition-colors text-[11px]"
+                title="Salvar alterações no arquivo"
               >
-                Arquivo
+                <Save className="w-3 h-3 text-amber-400" />
+                <span>Salvar</span>
               </button>
+
+              <button
+                onClick={() => setNewFileInputOpen(true)}
+                className="px-2 py-1 rounded bg-[#0c1018] hover:bg-[#141b27] border border-[#1b2537] text-zinc-300 hover:text-white flex items-center gap-1 transition-colors text-[11px]"
+                title="Novo arquivo"
+              >
+                <Plus className="w-3 h-3 text-cyan-400" />
+                <span>Novo</span>
+              </button>
+
               <button
                 onClick={() => {
-                  if (activeFile && activeFile.content) {
-                    navigator.clipboard.writeText(activeFile.content);
+                  if (activeFile) {
+                    setRenameValue(activeFile.name);
+                    setRenameModalOpen(true);
                   }
                 }}
-                className="px-2.5 py-1 rounded-lg text-zinc-400 hover:text-white hover:bg-[#121824] transition-colors"
+                className="px-2 py-1 rounded bg-[#0c1018] hover:bg-[#141b27] border border-[#1b2537] text-zinc-300 hover:text-white flex items-center gap-1 transition-colors text-[11px]"
+                title="Renomear arquivo atual"
               >
-                Copiar
+                <Edit2 className="w-3 h-3 text-zinc-400" />
+                <span>Renomear</span>
               </button>
+
               <button
                 onClick={() => {
-                  if (activeFile?.content) {
-                    try {
-                      if (activeFile.extension === 'json') {
-                        const parsed = JSON.parse(activeFile.content);
-                        updateFileContent(activeFile.id, JSON.stringify(parsed, null, 2));
-                      }
-                    } catch {}
-                  }
+                  if (activeFile) deleteFile(activeFile.id);
                 }}
-                className="px-2.5 py-1 rounded-lg text-zinc-400 hover:text-white hover:bg-[#121824] transition-colors"
+                className="px-2 py-1 rounded bg-[#0c1018] hover:bg-[#141b27] border border-[#1b2537] text-rose-400 hover:text-rose-300 flex items-center gap-1 transition-colors text-[11px]"
+                title="Excluir arquivo"
               >
-                Formatar
+                <Trash2 className="w-3 h-3 text-rose-400" />
+                <span>Excluir</span>
               </button>
+
               <span className="text-zinc-700">|</span>
+
               <button
-                onClick={runValidation}
-                className="px-3 py-1 rounded-full bg-[#101724] hover:bg-[#182234] border border-emerald-800/40 text-emerald-400 transition-colors flex items-center gap-1.5 font-semibold text-xs"
+                onClick={handleFormatCode}
+                className="px-2 py-1 rounded bg-[#0c1018] hover:bg-[#141b27] border border-[#1b2537] text-zinc-300 hover:text-white flex items-center gap-1 transition-colors text-[11px]"
+                title="Formatar identação e sintaxe"
               >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Validar</span>
-              </button>
-              <button
-                onClick={runBuild}
-                className="px-3 py-1 rounded-full bg-[#101724] hover:bg-[#182234] border border-amber-500/40 text-amber-400 transition-colors flex items-center gap-1.5 font-semibold text-xs"
-              >
-                <Play className="w-3.5 h-3.5 fill-amber-400/20" />
-                <span>Compilar</span>
-              </button>
-              <button
-                onClick={runPreview}
-                className="px-3 py-1 rounded-full bg-[#101724] hover:bg-[#182234] border border-cyan-800/40 text-cyan-400 transition-colors flex items-center gap-1.5 font-semibold text-xs"
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>Preview</span>
+                <AlignLeft className="w-3 h-3 text-zinc-400" />
+                <span>Formatar</span>
               </button>
             </div>
 
-            {/* Active file breadcrumb & badge */}
-            <div className="flex items-center gap-2 font-mono text-xs text-zinc-400">
-              {activeFile ? (
-                <>
-                  <span className="text-white font-medium">{activeFile.path}</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#151d2c] text-amber-400 border border-amber-500/30">
-                    {activeFile.extension ? activeFile.extension.toUpperCase() : 'TXT'}
-                  </span>
-                </>
-              ) : (
-                <span>Nenhum arquivo selecionado</span>
-              )}
-            </div>
+            {/* Quick validation badge */}
+            {activeFile && (
+              <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+                <span className="text-zinc-500">{activeFile.path}</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  {activeFile.extension?.toUpperCase() || 'TXT'}
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Code Textarea Area */}
+          {/* Tab Bar for Open Files */}
+          <div className="h-8 px-2 bg-[#05070a] border-b border-[#141b28] flex items-center gap-1 overflow-x-auto">
+            {openTabIds.map((tabId) => {
+              const findInTree = (nodes: ProjectFile[]): ProjectFile | null => {
+                for (const node of nodes) {
+                  if (node.id === tabId) return node;
+                  if (node.children) {
+                    const res = findInTree(node.children);
+                    if (res) return res;
+                  }
+                }
+                return null;
+              };
+              const tabFile = findInTree(files);
+              if (!tabFile) return null;
+              const isActiveTab = activeFile?.id === tabId;
+
+              return (
+                <div
+                  key={tabId}
+                  onClick={() => setActiveFile(tabFile)}
+                  className={`h-7 px-2.5 rounded-t flex items-center gap-1.5 cursor-pointer text-xs transition-colors border-t border-x ${
+                    isActiveTab
+                      ? 'bg-[#06080d] text-amber-300 border-[#1a2538] border-b-transparent font-bold'
+                      : 'bg-[#080b12] text-zinc-500 border-transparent hover:text-zinc-300 hover:bg-[#0c1018]'
+                  }`}
+                >
+                  <File className="w-3 h-3" />
+                  <span>{tabFile.name}</span>
+                  <button
+                    onClick={(e) => handleCloseTab(tabId, e)}
+                    className="ml-1 p-0.5 hover:text-white rounded hover:bg-zinc-800"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Editor Textarea with Line Numbers */}
           <div className="flex-1 relative flex overflow-hidden">
             {activeFile ? (
               <div className="flex-1 flex overflow-auto font-mono text-xs bg-[#05070b]">
                 {/* Line Numbers */}
-                <div className="py-4 px-3 bg-[#07090f] border-r border-[#151c2a] text-zinc-600 select-none text-right font-mono min-w-[48px]">
+                <div className="py-3 px-3 bg-[#070a10] border-r border-[#141b27] text-zinc-600 select-none text-right font-mono min-w-[48px]">
                   {(activeFile.content || '').split('\n').map((_, idx) => (
-                    <div key={idx} className="leading-6">
+                    <div key={idx} className="leading-6 text-[11px]">
                       {idx + 1}
                     </div>
                   ))}
                 </div>
 
-                {/* Editor Textarea */}
+                {/* Editor Area */}
                 <textarea
                   value={activeFile.content || ''}
                   onChange={(e) => updateFileContent(activeFile.id, e.target.value)}
                   spellCheck={false}
-                  className="flex-1 p-4 bg-transparent text-zinc-200 leading-6 resize-none focus:outline-none font-mono selection:bg-amber-500/30 selection:text-amber-200"
+                  className="flex-1 p-3 bg-transparent text-zinc-200 leading-6 resize-none focus:outline-none font-mono selection:bg-amber-500/30 selection:text-amber-200"
                 />
               </div>
             ) : (
-              <div className="flex-1 flex items-center justify-center text-xs font-mono text-zinc-600">
-                Selecione um arquivo no Explorador para editar
+              <div className="flex-1 flex flex-col items-center justify-center text-zinc-600 text-xs gap-2">
+                <FileCode className="w-8 h-8 text-zinc-700" />
+                <span>Nenhum arquivo aberto no editor.</span>
+                <span className="text-[11px] text-zinc-700">Selecione um arquivo na árvore à esquerda.</span>
+              </div>
+            )}
+          </div>
+
+          {/* PAINEL INFERIOR: Console/Output (Compilação, Validação, Sandbox) */}
+          <div className="border-t border-[#161f2e] bg-[#07090f] flex flex-col shrink-0">
+            <div className="h-8 px-3 bg-[#090d14] border-b border-[#141b27] flex items-center justify-between text-xs select-none">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setOutputTab('build'); setOutputCollapsed(false); }}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${
+                    outputTab === 'build' && !outputCollapsed
+                      ? 'bg-[#121927] text-amber-300 border border-amber-500/40'
+                      : 'text-zinc-500 hover:text-white'
+                  }`}
+                >
+                  Output Compilação
+                </button>
+                <button
+                  onClick={() => { setOutputTab('validation'); setOutputCollapsed(false); }}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${
+                    outputTab === 'validation' && !outputCollapsed
+                      ? 'bg-[#121927] text-emerald-300 border border-emerald-500/40'
+                      : 'text-zinc-500 hover:text-white'
+                  }`}
+                >
+                  Erros de Validação
+                </button>
+                <button
+                  onClick={() => { setOutputTab('sandbox'); setOutputCollapsed(false); }}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${
+                    outputTab === 'sandbox' && !outputCollapsed
+                      ? 'bg-[#121927] text-cyan-300 border border-cyan-800/40'
+                      : 'text-zinc-500 hover:text-white'
+                  }`}
+                >
+                  Logs Sandbox
+                </button>
+              </div>
+
+              <button
+                onClick={() => setOutputCollapsed(!outputCollapsed)}
+                className="text-[10px] text-zinc-500 hover:text-zinc-300"
+              >
+                {outputCollapsed ? '▲ Expandir' : '▼ Recolher'}
+              </button>
+            </div>
+
+            {!outputCollapsed && (
+              <div className="h-28 p-3 overflow-y-auto font-mono text-[11px] leading-relaxed bg-[#05070a]">
+                {outputTab === 'build' && (
+                  <div className="space-y-1 text-zinc-300">
+                    <div className="text-zinc-500">[BUILD] Iniciando processo de empacotamento para {activeProject.name}...</div>
+                    <div className="text-emerald-400">[BUILD] SHA-256 gerado: {activeFile?.checksum || activeProject.lastBuildHash}</div>
+                    <div className="text-amber-300">[BUILD] 0 avisos críticos detectados. Artefato pronto para sandbox.</div>
+                  </div>
+                )}
+                {outputTab === 'validation' && (
+                  <div className="space-y-1 text-zinc-300">
+                    <div className="text-emerald-400">[VALIDAÇÃO] Parser AST: Sintaxe 100% em conformidade com bash/posix.</div>
+                    <div className="text-zinc-400">[VALIDAÇÃO] Permissões: restrição de leitura e execução confirmadas.</div>
+                    <div className="text-cyan-400">[VALIDAÇÃO] Airgap Enforced: 0 requisições externas encontradas no payload.</div>
+                  </div>
+                )}
+                {outputTab === 'sandbox' && (
+                  <div className="space-y-1 text-zinc-300">
+                    <div className="text-cyan-400">[SANDBOX] Alvo vinculado: 127.0.0.1 (Loopback Confinado).</div>
+                    <div className="text-zinc-400">[SANDBOX] Memória alocada: 12.4MB / 512MB limit.</div>
+                    <div className="text-emerald-400">[SANDBOX] Status: OK (Conexões externas bloqueadas por iptables).</div>
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* RIGHT: File Properties Inspector */}
-        <div className="w-72 bg-[#080b12] flex flex-col shrink-0 select-none font-mono text-xs">
-          {/* Properties Header */}
-          <div className="px-4 py-3 border-b border-[#18202f] bg-[#0c1018]">
-            <span className="font-bold text-xs text-white tracking-wide uppercase">PROPRIEDADES</span>
+        {/* PAINEL DIREITO: Inspetor do Arquivo */}
+        <div className="w-72 bg-[#07090e] flex flex-col shrink-0 select-none text-xs">
+          {/* Header */}
+          <div className="h-10 px-3 border-b border-[#161f2e] bg-[#090d14] flex items-center justify-between">
+            <span className="font-bold text-[11px] text-zinc-300 uppercase tracking-wider">
+              INSPETOR DO ARQUIVO
+            </span>
           </div>
 
-          {/* Properties List */}
-          <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+          {/* Metadata Cards */}
+          <div className="p-3 space-y-3 flex-1 overflow-y-auto">
             {activeFile ? (
               <>
-                <div className="p-3 rounded-xl bg-[#0e131d] border border-[#1a2232] space-y-2.5">
+                <div className="p-3 rounded bg-[#0b0e16] border border-[#162030] space-y-2 text-xs">
                   <div>
-                    <span className="text-[10px] text-zinc-500 uppercase">Nome</span>
-                    <div className="text-zinc-200 font-semibold truncate mt-0.5">{activeFile.name}</div>
+                    <span className="text-[10px] text-zinc-500 uppercase font-bold">Nome</span>
+                    <div className="text-white font-bold mt-0.5 truncate">{activeFile.name}</div>
                   </div>
 
                   <div>
-                    <span className="text-[10px] text-zinc-500 uppercase">Tipo</span>
+                    <span className="text-[10px] text-zinc-500 uppercase font-bold">Tipo de Arquivo</span>
                     <div className="text-cyan-400 mt-0.5">
-                      {activeFile.extension ? `Texto / ${activeFile.extension.toUpperCase()}` : 'Binário / Pacote'}
+                      {activeFile.extension ? `Texto / .${activeFile.extension.toUpperCase()}` : 'Binário'}
                     </div>
                   </div>
 
                   <div>
-                    <span className="text-[10px] text-zinc-500 uppercase">Tamanho</span>
+                    <span className="text-[10px] text-zinc-500 uppercase font-bold">Permissões Simuladas (POSIX)</span>
+                    <div className="text-zinc-200 mt-0.5 font-mono flex items-center justify-between">
+                      <span className="text-amber-400 font-bold">{activeFile.extension === 'sh' ? '0755 (-rwxr-xr-x)' : '0644 (-rw-r--r--)'}</span>
+                      <span className="text-[10px] text-zinc-500">watson:sec-lab</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-zinc-500 uppercase font-bold">Tamanho</span>
                     <div className="text-zinc-300 mt-0.5">
                       {activeFile.size} bytes ({(activeFile.size / 1024).toFixed(2)} KB)
                     </div>
                   </div>
 
                   <div>
-                    <span className="text-[10px] text-zinc-500 uppercase">Codificação</span>
-                    <div className="text-zinc-300 mt-0.5">{activeFile.encoding}</div>
+                    <span className="text-[10px] text-zinc-500 uppercase font-bold">Hash SHA-256</span>
+                    <div className="flex items-center gap-1.5 mt-0.5 bg-[#07090f] p-1.5 rounded border border-[#182336]">
+                      <span className="font-mono text-[10px] text-amber-400 truncate flex-1">
+                        {activeFile.checksum || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}
+                      </span>
+                      <button
+                        onClick={handleCopyHash}
+                        className="p-1 hover:text-white text-zinc-400 transition-colors"
+                        title="Copiar Hash"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
 
                   <div>
-                    <span className="text-[10px] text-zinc-500 uppercase">Permissões</span>
-                    <div className="text-amber-300 font-semibold mt-0.5">{activeFile.permissions} (chmod 0644)</div>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] text-zinc-500 uppercase">Validação</span>
-                    <div className="text-emerald-400 font-semibold mt-0.5 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>{activeFile.validationStatus.toUpperCase()} (Sandbox)</span>
+                    <span className="text-[10px] text-zinc-500 uppercase font-bold">Validação de Integridade</span>
+                    <div className="text-emerald-400 font-bold mt-0.5 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{activeFile.validationStatus.toUpperCase()} (SANDBOX PASS)</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Primary Inspector Action Buttons */}
-                <div className="space-y-2 pt-2">
-                  <button
-                    onClick={() => saveFile(activeFile.id)}
-                    className="w-full py-2.5 px-4 rounded-full bg-[#f59e0b] hover:bg-[#d97706] text-black font-bold flex items-center justify-center gap-2 transition-all shadow-[0_0_12px_rgba(245,158,11,0.2)] font-mono text-xs"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>SALVAR ARQUIVO</span>
-                  </button>
+                {/* AÇÕES: Validar, Compilar, Analisar, Exportar */}
+                <div className="space-y-2 pt-1">
+                  <span className="text-[10px] text-zinc-500 uppercase font-bold block">
+                    AÇÕES DO LABORATÓRIO
+                  </span>
 
                   <button
                     onClick={runValidation}
-                    className="w-full py-2 px-4 rounded-full bg-[#111724] hover:bg-[#1a2336] border border-emerald-800/40 text-emerald-300 font-semibold flex items-center justify-center gap-2 transition-colors text-xs"
+                    className="w-full py-1.5 px-3 rounded bg-[#0e1420] hover:bg-[#152033] border border-emerald-800/50 text-emerald-400 font-bold flex items-center justify-center gap-2 transition-colors text-xs"
                   >
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>VALIDAR</span>
                   </button>
 
                   <button
                     onClick={runBuild}
-                    className="w-full py-2 px-4 rounded-full bg-[#111724] hover:bg-[#1a2336] border border-amber-500/40 text-amber-300 font-semibold flex items-center justify-center gap-2 transition-colors text-xs"
+                    className="w-full py-1.5 px-3 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold flex items-center justify-center gap-2 transition-colors text-xs shadow-sm"
                   >
-                    <Play className="w-4 h-4 text-amber-400 fill-amber-400/30" />
+                    <Play className="w-3.5 h-3.5 fill-black" />
                     <span>COMPILAR</span>
                   </button>
 
                   <button
-                    onClick={runPreview}
-                    className="w-full py-2 px-4 rounded-full bg-[#111724] hover:bg-[#1a2336] border border-cyan-800/40 text-cyan-300 font-semibold flex items-center justify-center gap-2 transition-colors text-xs"
+                    onClick={runAnalysis}
+                    className="w-full py-1.5 px-3 rounded bg-[#0e1420] hover:bg-[#152033] border border-indigo-800/50 text-indigo-400 font-bold flex items-center justify-center gap-2 transition-colors text-xs"
                   >
-                    <Eye className="w-4 h-4 text-cyan-400" />
-                    <span>PREVIEW</span>
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>ANALISAR</span>
+                  </button>
+
+                  <button
+                    onClick={runExport}
+                    className="w-full py-1.5 px-3 rounded bg-[#0e1420] hover:bg-[#152033] border border-cyan-800/50 text-cyan-400 font-bold flex items-center justify-center gap-2 transition-colors text-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>EXPORTAR</span>
                   </button>
                 </div>
               </>
             ) : (
-              <div className="text-zinc-600 text-center p-4">Nenhum arquivo ativo.</div>
+              <div className="text-zinc-600 text-center p-4">Nenhum arquivo selecionado.</div>
             )}
           </div>
+        </div>
+      </div>
 
-          {/* Delete File button */}
-          {activeFile && (
-            <div className="p-3 border-t border-[#18202f] bg-[#0c1018]">
+      {/* Rename Modal */}
+      {renameModalOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0b0f17] border border-[#1e2a3c] rounded-lg p-4 w-full max-w-sm space-y-3 shadow-2xl">
+            <h3 className="text-sm font-bold text-white uppercase">Renomear Arquivo</h3>
+            <input
+              type="text"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              className="w-full bg-[#07090e] border border-[#1e2a3c] rounded p-2 text-xs text-white focus:outline-none focus:border-amber-400"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2 text-xs">
               <button
-                onClick={() => deleteFile(activeFile.id)}
-                className="w-full py-1 text-center text-xs text-rose-400 hover:text-rose-300 flex items-center justify-center gap-1.5 transition-colors"
+                onClick={() => setRenameModalOpen(false)}
+                className="px-3 py-1 rounded bg-[#151c2a] text-zinc-300 hover:text-white"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Excluir do workspace</span>
+                Cancelar
+              </button>
+              <button
+                onClick={handleRenameConfirm}
+                className="px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold"
+              >
+                Confirmar
               </button>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* BOTTOM: Terminal / Build Output Panel */}
-      <div className="h-44 bg-[#05070a] border-t border-[#18202f] flex flex-col shrink-0 font-mono text-xs">
-        {/* Output Tabs Header */}
-        <div className="h-9 px-4 bg-[#090c13] border-b border-[#18202f] flex items-center justify-between select-none">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setBottomTab('build-log')}
-              className={`px-3 py-1 rounded-full text-xs transition-colors ${
-                bottomTab === 'build-log'
-                  ? 'bg-[#141c2b] text-amber-300 border border-amber-500/30 font-medium'
-                  : 'text-zinc-500 hover:text-white'
-              }`}
-            >
-              Terminal / Saída do Build
-            </button>
-            <button
-              onClick={() => setBottomTab('hex')}
-              className={`px-3 py-1 rounded-full text-xs transition-colors ${
-                bottomTab === 'hex'
-                  ? 'bg-[#141c2b] text-amber-300 border border-amber-500/30 font-medium'
-                  : 'text-zinc-500 hover:text-white'
-              }`}
-            >
-              Inspetor Hex
-            </button>
-            <button
-              onClick={() => setBottomTab('manifest')}
-              className={`px-3 py-1 rounded-full text-xs transition-colors ${
-                bottomTab === 'manifest'
-                  ? 'bg-[#141c2b] text-amber-300 border border-amber-500/30 font-medium'
-                  : 'text-zinc-500 hover:text-white'
-              }`}
-            >
-              Manifesto de Confinamento Sandbox
-            </button>
-          </div>
-
-          <div className="text-[10px] text-zinc-500">
-            <span>AIRGAP: 127.0.0.1:8888</span>
           </div>
         </div>
-
-        {/* Output Console Body */}
-        <div className="flex-1 overflow-y-auto p-4 text-xs leading-relaxed">
-          {bottomTab === 'build-log' && (
-            <div className="space-y-1 font-mono">
-              <div className="text-zinc-500">[14:32:08] Iniciando compilação no pipeline automatizado Watson...</div>
-              <div className="text-zinc-300">[14:32:09] Arquivo fonte: {activeFile?.path || 'templates/credential_audit_drill.html'}</div>
-              <div className="text-cyan-400">[14:32:09] Validação de sintaxe HTML5 em sandbox estrita concluída.</div>
-              <div className="text-cyan-400">[14:32:10] Higienização de rotas: todos os destinos de requisição restritos ao sink local.</div>
-              <div className="text-amber-400">[14:32:10] Checksum SHA-256 = 8e4f1a23b9d0c8741e2a849f7e5102ab</div>
-              <div className="text-emerald-400 font-semibold">[14:32:11] STATUS DO BUILD: SUCESSO. Artefato gerado em output/watson_drill_artifact.bin</div>
-            </div>
-          )}
-
-          {bottomTab === 'hex' && (
-            <pre className="text-cyan-300/90 text-xs font-mono">
-              {`00000000: 5741 5453 4f4e 2d53 4543 2d50 4b47 2d56  WATSON-SEC-PKG-V\n00000010: 3234 0000 7f00 0001 22b8 0000 e2a4 91b0  24......".......\n00000020: 8e4f 1a23 b9d0 c874 1e2a 849f 7e51 02ab  .O.#...t.*..~Q..\n00000030: 0000 0001 0000 0100 0000 0008 0000 0000  ................\n00000040: 6175 7468 2d64 7269 6c6c 2d73 696d 756c  auth-drill-simul\n00000050: 6174 696f 6e2d 746f 6b65 6e2d 3430 3200  ation-token-402.`}
-            </pre>
-          )}
-
-          {bottomTab === 'manifest' && (
-            <div className="text-zinc-300 space-y-1 font-mono">
-              <div><span className="text-amber-400">cgroup_memory_limit:</span> 512MB [APLICADO]</div>
-              <div><span className="text-amber-400">network_namespaces:</span> Bridge virtual isolada TAP (10.240.0.0/24)</div>
-              <div><span className="text-amber-400">capabilities:</span> ALL_DROPPED (CAP_NET_BIND_SERVICE retido)</div>
-              <div><span className="text-emerald-400 font-semibold">[PASS]</span> Nenhum vetor de escalonamento de privilégios detectado.</div>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { WatsonProvider, useWatson } from './context/WatsonContext';
 import { Sidebar } from './components/layout/Sidebar';
 import { HeaderToolbar } from './components/layout/HeaderToolbar';
 import { StatusBar } from './components/layout/StatusBar';
+import { BottomDock } from './components/layout/BottomDock';
 import { DashboardView } from './components/views/DashboardView';
 import { FileBuilderView } from './components/views/FileBuilderView';
 import { TemplateBuilderView } from './components/views/TemplateBuilderView';
@@ -81,6 +82,9 @@ const MainLayout: React.FC = () => {
         <main className="flex-1 flex min-h-0 overflow-hidden relative">
           {renderCurrentView()}
         </main>
+
+        {/* Collapsible Workstation Dock: Terminal / Build Output / Events */}
+        <BottomDock />
 
         {/* Bottom Technical Status Bar */}
         <StatusBar />

@@ -2,238 +2,360 @@ import React, { useState } from 'react';
 import { useWatson } from '../../context/WatsonContext';
 import {
   ShieldCheck,
-  Filter,
   RefreshCw,
   Download,
+  Wrench,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  XCircle,
   Binary,
+  Activity,
+  FileCode,
+  Sliders,
+  Check,
 } from 'lucide-react';
 
-export const AnalyzerView: React.FC = () => {
-  const { findings, fileMetadata, runAnalysis, activeProject, addNotification } = useWatson();
-  const [filter, setFilter] = useState<'ALL' | 'PASS' | 'WARNING' | 'ERROR'>('ALL');
+export interface SecurityFinding {
+  id: string;
+  severity: 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH';
+  rule: string;
+  location: string;
+  description: string;
+  suggestion: string;
+  fixed?: boolean;
+}
 
-  const filteredFindings = findings.filter((f) => {
-    if (filter === 'ALL') return true;
-    return f.severity === filter;
+export const AnalyzerView: React.FC = () => {
+  const { activeProject, addNotification, runAnalysis } = useWatson();
+
+  const [scanning, setScanning] = useState(false);
+  const [severityFilter, setSeverityFilter] = useState<'ALL' | 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH'>('ALL');
+
+  // 5 Metricas solicitadas pelo usuário:
+  // Complexidade, Entropia, Heurísticas, Validação de Sintaxe, Conformidade de Regras
+  const [metrics, setMetrics] = useState({
+    complexity: '4.2 (Baixa)',
+    entropy: '4.18 Shannon',
+    heuristics: '0 Anomalias',
+    syntaxValidation: '100% Válida',
+    ruleCompliance: '98.5% PASS',
   });
 
-  const passCount = findings.filter((f) => f.severity === 'PASS').length;
-  const warnCount = findings.filter((f) => f.severity === 'WARNING').length;
-  const errCount = findings.filter((f) => f.severity === 'ERROR').length;
+  // Tabela de Achados com campos: Severidade, Regra violada, Linha/Arquivo, Descrição, Sugestão de correção
+  const [findings, setFindings] = useState<SecurityFinding[]>([
+    {
+      id: 'find-1',
+      severity: 'HIGH',
+      rule: 'SEC-PERM-EXEC-MASK',
+      location: '/scripts/deploy_lab.sh:18',
+      description: 'Script requer permissão 0755 mas está definido com 0777 em ambiente compartilhado.',
+      suggestion: 'Executar chmod 0750 para restringir permissões ao usuário do laboratório.',
+      fixed: false,
+    },
+    {
+      id: 'find-2',
+      severity: 'MEDIUM',
+      rule: 'SEC-AIRGAP-RAW-NET',
+      location: '/configs/payload.json:12',
+      description: 'Definição de host de bind não restringe explicitamente a interface 127.0.0.1.',
+      suggestion: 'Adicionar "bind_address": "127.0.0.1" no objeto de transporte.',
+      fixed: false,
+    },
+    {
+      id: 'find-3',
+      severity: 'LOW',
+      rule: 'AST-UNESCAPED-PARAM',
+      location: '/templates/phishing_sim.html:34',
+      description: 'Variável {{custom_payload}} não possui sanitização estrita de caracteres HTML.',
+      suggestion: 'Usar filtro de escape seguro no pré-processamento de renderização.',
+      fixed: false,
+    },
+    {
+      id: 'find-4',
+      severity: 'INFO',
+      rule: 'META-MISSING-HASH',
+      location: '/manifest.json:5',
+      description: 'Campo checksum SHA-256 pendente de cálculo no último build.',
+      suggestion: 'Compilar o projeto com "systest build" para assinar os metadados.',
+      fixed: true,
+    },
+  ]);
 
-  const exportReport = () => {
-    const report = {
-      project: activeProject.name,
-      timestamp: new Date().toISOString(),
-      findingsSummary: { pass: passCount, warning: warnCount, error: errCount },
-      findings,
-      fileMetadata,
-    };
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+  // Ação: Executar Novo Scan
+  const handleExecuteScan = async () => {
+    setScanning(true);
+    addNotification('Scanner Ativo', 'Executando inspeção AST profunda e cálculo de entropia...', 'info');
+    runAnalysis();
+
+    setTimeout(() => {
+      setScanning(false);
+      setMetrics({
+        complexity: '3.8 (Ótima)',
+        entropy: '4.12 Shannon',
+        heuristics: 'Conforme',
+        syntaxValidation: '100% Válida',
+        ruleCompliance: '99.1% PASS',
+      });
+      addNotification('Scan Concluído', 'Varredura finalizada. 4 itens inspecionados.', 'success');
+    }, 1000);
+  };
+
+  // Ação: Exportar Relatório PDF/MD
+  const handleExportReport = () => {
+    const markdownContent = `# RELATÓRIO DE AUDITORIA DE SEGURANÇA - SYSTEST WORKSTATION
+Data da Emissão: ${new Date().toLocaleString('pt-BR')}
+Projeto: ${activeProject.name}
+Ambiente: Laboratório Confinado (Airgapped)
+
+## 1. Métricas Técnicas
+- Complexidade Ciclomática: ${metrics.complexity}
+- Entropia de Shannon: ${metrics.entropy}
+- Heurísticas: ${metrics.heuristics}
+- Validação de Sintaxe: ${metrics.syntaxValidation}
+- Conformidade de Regras: ${metrics.ruleCompliance}
+
+## 2. Achados e Conformidade (Findings)
+${findings
+  .map(
+    (f) => `### [${f.severity}] ${f.rule}
+- **Localização:** ${f.location}
+- **Descrição:** ${f.description}
+- **Sugestão de Correção:** ${f.suggestion}
+- **Status:** ${f.fixed ? 'CORRIGIDO (AUTO-FIX)' : 'PENDENTE'}
+`
+  )
+  .join('\n')}
+
+---
+Emitido por SysTest Security Laboratory v2.4 (Kali-Lab).
+`;
+
+    const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `watson-analysis-report-${activeProject.name}.json`;
+    a.download = `systest-security-report-${activeProject.name.toLowerCase()}.md`;
     a.click();
     URL.revokeObjectURL(url);
-    addNotification('Relatório Exportado', 'Relatório JSON de análise técnica gerado com sucesso.', 'success');
+
+    addNotification('Relatório Exportado', 'Documento de auditoria gerado em Markdown/MD.', 'success');
   };
 
+  // Ação: Aplicar Auto-Fix Seguro
+  const handleApplyAutoFix = () => {
+    setFindings((prev) => prev.map((f) => ({ ...f, fixed: true })));
+    setMetrics((prev) => ({
+      ...prev,
+      ruleCompliance: '100% PASS',
+    }));
+    addNotification('Auto-Fix Aplicado', 'Todas as correções automáticas seguras foram incorporadas ao projeto.', 'success');
+  };
+
+  const handleFixSingle = (id: string) => {
+    setFindings((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, fixed: true } : f))
+    );
+    addNotification('Correção Aplicada', 'Item remediado com sucesso.', 'info');
+  };
+
+  const filteredFindings = findings.filter((f) => {
+    if (severityFilter === 'ALL') return true;
+    return f.severity === severityFilter;
+  });
+
   return (
-    <div className="flex-1 flex flex-col h-full watson-grid-bg bg-black overflow-y-auto p-4 sm:p-6 lg:p-8 font-sans text-zinc-300 space-y-6">
-      {/* Top Banner */}
-      <div className="bg-[#090c13] border border-[#1a2232] rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+    <div className="flex-1 flex flex-col h-full bg-[#040609] overflow-y-auto p-4 sm:p-6 font-mono text-zinc-300 space-y-5 select-none">
+      {/* Top Header & Actions:
+          'Executar Novo Scan', 'Exportar Relatório PDF/MD', 'Aplicar Auto-Fix Seguro' */}
+      <div className="bg-[#080c14] border border-[#162030] rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
         <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <h1 className="text-base font-bold text-white tracking-wide uppercase font-mono">ANALISADOR DE SEGURANÇA TÉCNICO</h1>
-            <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono font-semibold">
-              SCANNER AST & ENTROPIA
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span className="text-emerald-400 font-bold text-xs uppercase tracking-wider">
+              [INSPEÇÃO TÉCNICA AST & ENTROPIA]
             </span>
           </div>
-          <p className="text-xs text-zinc-400 mt-1.5 font-sans">
-            Validação estática de regras, cálculo de entropia de Shannon, verificação de confinamento em sandbox e integridade de artefatos.
+          <h1 className="text-lg font-black text-white tracking-wide uppercase mt-1">
+            Analisador de Segurança e Conformidade
+          </h1>
+          <p className="text-xs text-zinc-400 font-sans mt-0.5">
+            Análise estática de código, cálculo de entropia de Shannon e verificação de regras de confinamento do SysTest.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 font-mono">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {/* Executar Novo Scan */}
           <button
-            onClick={runAnalysis}
-            className="px-3.5 py-2 rounded-full bg-[#111724] hover:bg-[#1a2336] border border-emerald-800/40 text-emerald-300 flex items-center gap-2 text-xs transition-colors"
+            onClick={handleExecuteScan}
+            disabled={scanning}
+            className="px-3.5 py-1.5 rounded bg-[#0f1624] hover:bg-[#162234] border border-emerald-800/40 text-emerald-300 flex items-center gap-1.5 transition-colors font-bold"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Reanalisar</span>
+            <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${scanning ? 'animate-spin' : ''}`} />
+            <span>{scanning ? 'ESCANEANDO...' : 'EXECUTAR NOVO SCAN'}</span>
           </button>
+
+          {/* Exportar Relatório PDF/MD */}
           <button
-            onClick={exportReport}
-            className="px-4 py-2 rounded-full bg-[#f59e0b] hover:bg-[#d97706] text-black font-bold text-xs flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+            onClick={handleExportReport}
+            className="px-3.5 py-1.5 rounded bg-[#0f1624] hover:bg-[#162234] border border-cyan-800/40 text-cyan-300 flex items-center gap-1.5 transition-colors font-bold"
           >
-            <Download className="w-4 h-4" />
-            <span>Exportar JSON</span>
+            <Download className="w-3.5 h-3.5 text-cyan-400" />
+            <span>EXPORTAR RELATÓRIO MD</span>
+          </button>
+
+          {/* Aplicar Auto-Fix Seguro */}
+          <button
+            onClick={handleApplyAutoFix}
+            className="px-3.5 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+          >
+            <Wrench className="w-3.5 h-3.5 fill-black" />
+            <span>APLICAR AUTO-FIX SEGURO</span>
           </button>
         </div>
       </div>
 
-      {/* Terminal-Style Verification Summary Box */}
-      <div className="bg-[#080b12] border border-[#18202f] rounded-2xl p-5 font-mono text-xs leading-relaxed space-y-2 shadow-lg">
-        <div className="text-[11px] font-bold text-amber-400 mb-2 border-b border-[#18202f] pb-2 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-          MANIFESTO DE VERIFICAÇÃO WATSON:
+      {/* 5 Métricas do Usuário:
+          Complexidade, Entropia, Heurísticas, Validação de Sintaxe, Conformidade de Regras */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {/* Complexidade */}
+        <div className="bg-[#070a10] border border-[#162030] rounded-lg p-3">
+          <span className="text-[10px] text-zinc-500 uppercase font-bold block">Complexidade</span>
+          <div className="text-white font-bold text-sm mt-1">{metrics.complexity}</div>
+          <div className="text-[10px] text-emerald-400 mt-1">Grau ciclomático seguro</div>
         </div>
-        <div className="text-emerald-400 flex items-center gap-2 font-medium">
-          <span className="text-emerald-500">[PASS]</span> Validação de workspace: estrutura de diretórios íntegra e isolada
+
+        {/* Entropia */}
+        <div className="bg-[#070a10] border border-[#162030] rounded-lg p-3">
+          <span className="text-[10px] text-zinc-500 uppercase font-bold block">Entropia</span>
+          <div className="text-cyan-300 font-bold text-sm mt-1">{metrics.entropy}</div>
+          <div className="text-[10px] text-zinc-500 mt-1">Distribuição uniforme</div>
         </div>
-        <div className="text-emerald-400 flex items-center gap-2 font-medium">
-          <span className="text-emerald-500">[PASS]</span> Estrutura de arquivos: 8 arquivos validados com permissões POSIX restritas
+
+        {/* Heurísticas */}
+        <div className="bg-[#070a10] border border-[#162030] rounded-lg p-3">
+          <span className="text-[10px] text-zinc-500 uppercase font-bold block">Heurísticas</span>
+          <div className="text-emerald-400 font-bold text-sm mt-1">{metrics.heuristics}</div>
+          <div className="text-[10px] text-zinc-500 mt-1">Assinaturas validadas</div>
         </div>
-        <div className="text-emerald-400 flex items-center gap-2 font-medium">
-          <span className="text-emerald-500">[PASS]</span> Confinamento: limite de memória de container travado em 512MB
+
+        {/* Validação de Sintaxe */}
+        <div className="bg-[#070a10] border border-[#162030] rounded-lg p-3">
+          <span className="text-[10px] text-zinc-500 uppercase font-bold block">Validação de Sintaxe</span>
+          <div className="text-amber-400 font-bold text-sm mt-1">{metrics.syntaxValidation}</div>
+          <div className="text-[10px] text-zinc-500 mt-1">Parser AST sem falhas</div>
         </div>
-        <div className="text-amber-400 flex items-center gap-2 font-medium">
-          <span className="text-amber-500">[WARN]</span> Ativo secundário ausente: favicon.ico não referenciado no pacote
-        </div>
-        <div className="text-emerald-400 flex items-center gap-2 font-medium">
-          <span className="text-emerald-500">[PASS]</span> Isolamento de rede: egress travado estritamente em RFC-1122 local loopback
+
+        {/* Conformidade de Regras */}
+        <div className="bg-[#070a10] border border-[#162030] rounded-lg p-3 col-span-2 sm:col-span-1">
+          <span className="text-[10px] text-zinc-500 uppercase font-bold block">Conformidade de Regras</span>
+          <div className="text-emerald-300 font-bold text-sm mt-1">{metrics.ruleCompliance}</div>
+          <div className="text-[10px] text-emerald-400 mt-1">Airgap Strict Enforced</div>
         </div>
       </div>
 
-      {/* Filters Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Filter className="w-4 h-4 text-zinc-500" />
-          <span className="text-[11px] text-zinc-500 uppercase font-semibold">Severidade:</span>
-          {(['ALL', 'PASS', 'WARNING', 'ERROR'] as const).map((f) => {
-            const isActive = filter === f;
-            return (
+      {/* Tabela de Achados (Findings) */}
+      <div className="bg-[#070a10] border border-[#162030] rounded-xl overflow-hidden shadow-lg">
+        <div className="p-3 bg-[#090d14] border-b border-[#141b27] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-white uppercase tracking-wider">
+              TABELA DE ACHADOS & REGULAMENTAÇÃO
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-[#101726] text-amber-300 border border-amber-500/40">
+              {filteredFindings.length} ITENS
+            </span>
+          </div>
+
+          {/* Severity filter selector */}
+          <div className="flex items-center gap-1 text-[10px]">
+            {(['ALL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'] as const).map((sev) => (
               <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-1 rounded-full text-xs transition-colors border ${
-                  isActive
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-semibold'
-                    : 'bg-[#0d121c] text-zinc-400 hover:text-white border-[#1d2638]'
+                key={sev}
+                onClick={() => setSeverityFilter(sev)}
+                className={`px-2 py-0.5 rounded transition-colors ${
+                  severityFilter === sev
+                    ? 'bg-amber-500 text-black font-bold'
+                    : 'text-zinc-400 hover:text-white bg-[#0c1018]'
                 }`}
               >
-                {f} {f === 'PASS' && `(${passCount})`} {f === 'WARNING' && `(${warnCount})`} {f === 'ERROR' && `(${errCount})`}
+                {sev}
               </button>
-            );
-          })}
+            ))}
+          </div>
         </div>
 
-        <span className="text-xs text-zinc-500">
-          Exibindo {filteredFindings.length} de {findings.length} apontamentos
-        </span>
-      </div>
-
-      {/* Findings Table */}
-      <div className="border border-[#18202f] rounded-2xl overflow-hidden bg-[#090c13] shadow-md">
-        <table className="w-full text-left text-xs border-collapse font-mono">
-          <thead>
-            <tr className="bg-[#0e131d] border-b border-[#18202f] text-[10px] text-zinc-400 uppercase tracking-wider">
-              <th className="py-3 px-4">Status</th>
-              <th className="py-3 px-4">ID Regra</th>
-              <th className="py-3 px-4">Categoria</th>
-              <th className="py-3 px-4">Componente</th>
-              <th className="py-3 px-4">Descrição</th>
-              <th className="py-3 px-4">Remediação</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#151c2a]">
-            {filteredFindings.map((finding) => {
-              let badge = (
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
-                  PASS
-                </span>
-              );
-
-              if (finding.severity === 'WARNING') {
-                badge = (
-                  <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-bold">
-                    WARN
-                  </span>
-                );
-              } else if (finding.severity === 'ERROR') {
-                badge = (
-                  <span className="px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30 text-[10px] font-bold">
-                    ERROR
-                  </span>
-                );
-              }
-
-              return (
-                <tr key={finding.id} className="hover:bg-[#0f1422] transition-colors">
-                  <td className="py-3 px-4">{badge}</td>
-                  <td className="py-3 px-4 font-semibold text-cyan-300">{finding.ruleId}</td>
-                  <td className="py-3 px-4 text-zinc-400">{finding.category}</td>
-                  <td className="py-3 px-4 text-white font-medium">{finding.target}</td>
-                  <td className="py-3 px-4 text-zinc-300">{finding.message}</td>
-                  <td className="py-3 px-4 text-zinc-500 text-[11px]">{finding.remediation}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* File Metadata & Shannon Entropy Inspector Table */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Binary className="w-4 h-4 text-cyan-400" />
-          <span className="text-xs font-bold text-white uppercase tracking-wide font-mono">
-            METADADOS DE ARQUIVOS & INSPEÇÃO DE ENTROPIA DE SHANNON
-          </span>
-        </div>
-
-        <div className="border border-[#18202f] rounded-2xl overflow-hidden bg-[#090c13] shadow-md">
-          <table className="w-full text-left text-xs border-collapse font-mono">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-[#0e131d] border-b border-[#18202f] text-[10px] text-zinc-400 uppercase tracking-wider">
-                <th className="py-3 px-4">Nome do Arquivo</th>
-                <th className="py-3 px-4">Tipo MIME</th>
-                <th className="py-3 px-4">Tamanho</th>
-                <th className="py-3 px-4">Entropia Shannon</th>
-                <th className="py-3 px-4">Digest SHA-256</th>
-                <th className="py-3 px-4">Flags Sandbox</th>
+              <tr className="bg-[#05070c] border-b border-[#141b27] text-zinc-500 uppercase font-bold text-[10px]">
+                <th className="py-2.5 px-3">SEVERIDADE</th>
+                <th className="py-2.5 px-3">REGRA VIOLADA</th>
+                <th className="py-2.5 px-3">LINHA / ARQUIVO</th>
+                <th className="py-2.5 px-3">DESCRIÇÃO</th>
+                <th className="py-2.5 px-3">SUGESTÃO DE CORREÇÃO</th>
+                <th className="py-2.5 px-3 text-right">AÇÃO</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#151c2a]">
-              {fileMetadata.map((meta, idx) => (
-                <tr key={idx} className="hover:bg-[#0f1422] transition-colors">
-                  <td className="py-3 px-4 font-bold text-white">{meta.name}</td>
-                  <td className="py-3 px-4 text-zinc-400">{meta.mimeType}</td>
-                  <td className="py-3 px-4 text-zinc-300">{(meta.sizeBytes / 1024).toFixed(2)} KB</td>
-                  <td className="py-3 px-4">
-                    <span
-                      className={`font-bold ${
-                        meta.entropy > 6.5
-                          ? 'text-amber-400'
-                          : meta.entropy > 5.0
-                          ? 'text-cyan-300'
-                          : 'text-emerald-400'
-                      }`}
-                    >
-                      {meta.entropy.toFixed(3)} bits
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-zinc-500 text-[11px] font-mono">
-                    {meta.sha256.substring(0, 16)}...
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex flex-wrap gap-1">
-                      {meta.sandboxFlags.map((flag, fIdx) => (
-                        <span
-                          key={fIdx}
-                          className="text-[9px] px-2 py-0.5 rounded-full bg-[#121927] text-cyan-300 border border-cyan-800/40"
-                        >
-                          {flag}
+            <tbody className="divide-y divide-[#101622]">
+              {filteredFindings.map((f) => {
+                let badgeClass = 'bg-zinc-800 text-zinc-300 border-zinc-700';
+                if (f.severity === 'HIGH') badgeClass = 'bg-rose-950/40 text-rose-400 border-rose-800/50';
+                if (f.severity === 'MEDIUM') badgeClass = 'bg-amber-950/40 text-amber-300 border-amber-800/50';
+                if (f.severity === 'LOW') badgeClass = 'bg-yellow-950/40 text-yellow-300 border-yellow-800/50';
+                if (f.severity === 'INFO') badgeClass = 'bg-cyan-950/40 text-cyan-400 border-cyan-800/50';
+
+                return (
+                  <tr
+                    key={f.id}
+                    className={`transition-colors ${
+                      f.fixed ? 'opacity-60 bg-[#070c12]' : 'hover:bg-[#090d15]'
+                    }`}
+                  >
+                    {/* Severidade */}
+                    <td className="py-2.5 px-3">
+                      <span className={`text-[9px] px-2 py-0.5 rounded border font-bold ${badgeClass}`}>
+                        {f.severity}
+                      </span>
+                    </td>
+
+                    {/* Regra violada */}
+                    <td className="py-2.5 px-3 font-mono font-bold text-amber-400 text-[11px]">
+                      {f.rule}
+                    </td>
+
+                    {/* Linha / Arquivo */}
+                    <td className="py-2.5 px-3 font-mono text-cyan-300 text-[11px]">
+                      {f.location}
+                    </td>
+
+                    {/* Descrição */}
+                    <td className="py-2.5 px-3 text-zinc-300 font-sans text-xs max-w-xs">
+                      {f.description}
+                    </td>
+
+                    {/* Sugestão de correção */}
+                    <td className="py-2.5 px-3 text-zinc-400 font-sans text-xs max-w-xs">
+                      {f.suggestion}
+                    </td>
+
+                    {/* Ação */}
+                    <td className="py-2.5 px-3 text-right">
+                      {f.fixed ? (
+                        <span className="text-[10px] text-emerald-400 font-bold flex items-center justify-end gap-1">
+                          <Check className="w-3 h-3" /> Corrigido
                         </span>
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      ) : (
+                        <button
+                          onClick={() => handleFixSingle(f.id)}
+                          className="px-2 py-1 rounded bg-[#0f1624] hover:bg-amber-500 hover:text-black border border-amber-500/40 text-amber-300 font-bold text-[10px] transition-colors"
+                        >
+                          Auto-Fix
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

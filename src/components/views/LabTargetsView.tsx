@@ -3,270 +3,478 @@ import { useWatson } from '../../context/WatsonContext';
 import {
   Server,
   Radio,
-  Power,
   Plus,
+  Terminal,
   CheckCircle2,
+  Trash2,
+  Search,
+  Check,
+  Shield,
+  Activity,
+  Layers,
+  ArrowRight,
+  ExternalLink,
 } from 'lucide-react';
 import { LabTarget } from '../../types';
 
 export const LabTargetsView: React.FC = () => {
-  const { targets, activeTarget, setActiveTarget, toggleTargetStatus, pingTarget, addNotification } = useWatson();
+  const {
+    targets,
+    activeTarget,
+    setActiveTarget,
+    pingTarget,
+    addNotification,
+    setActiveView,
+    setBottomDock,
+  } = useWatson();
+
+  const [targetList, setTargetList] = useState<LabTarget[]>([
+    {
+      id: 'tgt-ubuntu',
+      name: 'LAB-UBUNTU-01',
+      type: 'TRAINING VM',
+      address: '192.168.10.101',
+      status: 'ONLINE',
+      lastConnection: 'Hoje, 14:32',
+      latencyMs: 1.8,
+      environment: 'Ubuntu 24.04 LTS (Airgapped)',
+      notes: 'Estação de testes principal para simulações',
+      openPorts: [22, 80],
+    },
+    {
+      id: 'tgt-win',
+      name: 'LAB-WIN-SANDBOX',
+      type: 'TEST ENVIRONMENT',
+      address: '192.168.10.105',
+      status: 'IDLE',
+      lastConnection: 'Hoje, 11:20',
+      latencyMs: 3.4,
+      environment: 'Windows Server 2022 Isolado',
+      notes: 'Sandbox com hyper-v isolado',
+      openPorts: [3389, 445],
+    },
+    {
+      id: 'tgt-docker',
+      name: 'LAB-DOCKER-NODE',
+      type: 'LOCAL SANDBOX',
+      address: '127.0.0.1:8888',
+      status: 'ONLINE',
+      lastConnection: 'Há 5 minutos',
+      latencyMs: 0.9,
+      environment: 'Docker Engine 26.0 (cgroups v2)',
+      notes: 'Confinamento de namespaces loopback',
+      openPorts: [8888],
+    },
+    {
+      id: 'tgt-api',
+      name: 'LAB-API-GATEWAY',
+      type: 'CTF DRILL NODE',
+      address: '10.0.0.45:8443',
+      status: 'ONLINE',
+      lastConnection: 'Hoje, 09:15',
+      latencyMs: 2.1,
+      environment: 'Kong API Gateway Sandbox',
+      notes: 'Roteamento seguro de payloads',
+      openPorts: [8443, 8000],
+    },
+    {
+      id: 'tgt-web',
+      name: 'LAB-WEB-SERVER',
+      type: 'TEST ENVIRONMENT',
+      address: '192.168.10.200',
+      status: 'OFFLINE',
+      lastConnection: 'Ontem, 18:40',
+      latencyMs: 0,
+      environment: 'Nginx Reverse Proxy',
+      notes: 'Servidor de mock para testes web',
+      openPorts: [],
+    },
+  ]);
+
   const [newTargetModal, setNewTargetModal] = useState(false);
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [type, setType] = useState<LabTarget['type']>('LOCAL SANDBOX');
+  const [inspectTarget, setInspectTarget] = useState<LabTarget | null>(null);
+
+  // Form states
+  const [newName, setNewName] = useState('');
+  const [newType, setNewType] = useState('Linux');
+  const [newHost, setNewHost] = useState('');
+
+  const handlePing = (id: string, name: string) => {
+    pingTarget(id);
+    setTargetList((prev) =>
+      prev.map((t) =>
+        t.id === id ? { ...t, latencyMs: Number((Math.random() * 3 + 0.8).toFixed(1)) } : t
+      )
+    );
+    addNotification('Ping de Alvo', `ICMP echo para ${name} respondido com sucesso.`, 'info');
+  };
+
+  const handleConnectTerminal = (target: LabTarget) => {
+    setActiveTarget(target);
+    setBottomDock({ isOpen: true, activeTab: 'terminal' });
+    setActiveView('terminal');
+    addNotification('Sessão Conectada', `Terminal SSH vinculado ao alvo ${target.name} (${target.address})`, 'success');
+  };
+
+  const handleSetActive = (target: LabTarget) => {
+    setActiveTarget(target);
+    addNotification('Alvo Definido', `${target.name} é o alvo operacional ativo do laboratório.`, 'success');
+  };
+
+  const handleDelete = (id: string, name: string) => {
+    setTargetList((prev) => prev.filter((t) => t.id !== id));
+    addNotification('Alvo Removido', `O alvo ${name} foi desconectado do catálogo.`, 'info');
+  };
+
+  const handleCreateTarget = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim() || !newHost.trim()) return;
+
+    const newT: LabTarget = {
+      id: `tgt-${Date.now()}`,
+      name: newName.trim(),
+      type: (newType as any) || 'LOCAL SANDBOX',
+      address: newHost.trim(),
+      status: 'ONLINE',
+      lastConnection: 'Agora mesmo',
+      latencyMs: 1.2,
+      environment: 'Laboratório Confinado',
+      notes: 'Nó registrado manualmente pelo operador',
+      openPorts: [22, 80],
+    };
+
+    setTargetList((prev) => [newT, ...prev]);
+    setNewName('');
+    setNewHost('');
+    setNewTargetModal(false);
+    addNotification('Alvo Cadastrado', `${newT.name} adicionado ao inventário do laboratório.`, 'success');
+  };
 
   return (
-    <div className="flex-1 flex flex-col h-full watson-grid-bg bg-black overflow-y-auto p-4 sm:p-6 lg:p-8 font-sans text-zinc-300 space-y-6">
+    <div className="flex-1 flex flex-col h-full bg-[#040609] overflow-y-auto p-4 sm:p-6 lg:p-7 font-mono text-zinc-300 space-y-5 select-none">
       {/* Header Banner */}
-      <div className="bg-[#090c13] border border-[#1a2232] rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+      <div className="bg-[#080c14] border border-[#162030] rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
         <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
-              <Server className="w-5 h-5" />
-            </div>
-            <h1 className="text-base font-bold text-white tracking-wide uppercase font-mono">GERENCIADOR DE ALVOS LAB</h1>
-            <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-mono font-semibold">
-              NODES SINTÉTICOS
+          <div className="flex items-center gap-2">
+            <Server className="w-4 h-4 text-cyan-400" />
+            <span className="text-cyan-400 font-bold text-xs uppercase tracking-widest">
+              [LAB TARGET MANAGER]
             </span>
+            <span className="text-zinc-600">•</span>
+            <span className="text-zinc-400 text-xs font-sans">Nós e hosts de testes controlados</span>
           </div>
-          <p className="text-xs text-zinc-400 mt-1.5 font-sans">
-            Ambientes de teste virtuais autorizados e nós de sandbox isolados (airgapped) para treinamentos e simulações.
+          <h1 className="text-lg font-black text-white tracking-wide uppercase mt-1">
+            Gerenciador de Alvos de Laboratório
+          </h1>
+          <p className="text-xs text-zinc-400 font-sans mt-0.5">
+            Cadastre estações locais, sandboxes confinados e servidores de teste com isolamento total airgapped.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 font-mono">
+        <div className="flex items-center gap-2 text-xs">
           <button
-            onClick={() => pingTarget(activeTarget.id)}
-            className="px-3.5 py-2 rounded-full bg-[#111724] hover:bg-[#1a2336] border border-cyan-800/40 text-cyan-300 flex items-center gap-2 text-xs transition-colors"
+            onClick={() => handlePing(activeTarget.id, activeTarget.name)}
+            className="px-3 py-1.5 rounded bg-[#0c121c] hover:bg-[#141e2e] border border-cyan-800/40 text-cyan-300 flex items-center gap-1.5 transition-colors"
           >
             <Radio className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Ping Ativo ({activeTarget.name})</span>
+            <span>Ping Alvo Ativo ({activeTarget.name})</span>
           </button>
+
           <button
             onClick={() => setNewTargetModal(true)}
-            className="px-4 py-2 rounded-full bg-[#f59e0b] hover:bg-[#d97706] text-black font-bold text-xs flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+            className="px-3.5 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold flex items-center gap-1.5 transition-colors shadow-sm"
           >
             <Plus className="w-4 h-4" />
-            <span>Adicionar Nó</span>
+            <span>CADASTRAR ALVO</span>
           </button>
         </div>
       </div>
 
-      {/* Target Nodes Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {targets.map((tgt) => {
-          const isActive = tgt.id === activeTarget.id;
-          const isOnline = tgt.status === 'ONLINE';
+      {/* Real Targets Table */}
+      <div className="bg-[#070a10] border border-[#162030] rounded-xl overflow-hidden shadow-lg">
+        <div className="p-3 bg-[#090d14] border-b border-[#141b27] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-white uppercase tracking-wider">
+              INVENTÁRIO DE ALVOS CONECTADOS
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-[#101726] text-cyan-300 border border-cyan-800/40">
+              {targetList.length} HOSTS
+            </span>
+          </div>
 
-          return (
-            <div
-              key={tgt.id}
-              className={`bg-[#0b0e15] border rounded-2xl p-5 flex flex-col justify-between transition-all duration-200 ${
-                isActive
-                  ? 'border-cyan-500/50 bg-[#0d131f] shadow-[0_0_20px_rgba(6,182,212,0.1)] ring-1 ring-cyan-500/30'
-                  : 'border-[#1a2232] hover:border-[#28354c]'
-              }`}
-            >
-              {/* Top Node Header */}
-              <div>
-                <div className="flex items-start justify-between pb-3 mb-3 border-b border-[#18202e]">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-base font-bold text-white tracking-wide">{tgt.name}</span>
-                      {isActive && (
-                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono font-bold">
-                          ALVO ATIVO
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[11px] text-amber-400 font-medium font-mono mt-0.5">{tgt.type}</div>
-                  </div>
+          <div className="text-[11px] text-zinc-500">
+            Alvo em execução:{' '}
+            <strong className="text-amber-400">{activeTarget.name}</strong>
+          </div>
+        </div>
 
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-[10px] px-2.5 py-0.5 rounded-full font-semibold font-mono flex items-center gap-1.5 ${
-                        isOnline
-                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                          : 'bg-zinc-900 text-zinc-500 border border-zinc-800'
-                      }`}
-                    >
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-[#05070c] border-b border-[#141b27] text-zinc-500 uppercase font-bold text-[10px]">
+                <th className="py-2.5 px-3">NOME DO ALVO</th>
+                <th className="py-2.5 px-3">TIPO</th>
+                <th className="py-2.5 px-3">IP / HOST</th>
+                <th className="py-2.5 px-3">STATUS</th>
+                <th className="py-2.5 px-3">LATÊNCIA</th>
+                <th className="py-2.5 px-3">ÚLTIMO CHECK</th>
+                <th className="py-2.5 px-3 text-right">AÇÕES</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#101622]">
+              {targetList.map((tgt) => {
+                const isActive = tgt.id === activeTarget.id || tgt.name === activeTarget.name;
+                const isOnline = tgt.status === 'ONLINE';
+
+                let statusColor = 'bg-zinc-800 text-zinc-400 border-zinc-700';
+                if (tgt.status === 'ONLINE') statusColor = 'bg-emerald-950/40 text-emerald-400 border-emerald-800/50';
+                else if (tgt.status === ('CONFINADO' as any)) statusColor = 'bg-cyan-950/40 text-cyan-400 border-cyan-800/50';
+                else if (tgt.status === ('BUSY' as any)) statusColor = 'bg-amber-950/40 text-amber-400 border-amber-800/50';
+                else if (tgt.status === 'OFFLINE') statusColor = 'bg-rose-950/40 text-rose-400 border-rose-800/50';
+
+                return (
+                  <tr
+                    key={tgt.id}
+                    className={`transition-colors ${
+                      isActive ? 'bg-[#0e1624]/70 text-white' : 'hover:bg-[#090d15] text-zinc-300'
+                    }`}
+                  >
+                    {/* Nome do Alvo */}
+                    <td className="py-2.5 px-3 font-bold flex items-center gap-2">
                       <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'
+                        className={`w-2 h-2 rounded-full ${
+                          isActive ? 'bg-amber-400 ring-2 ring-amber-400/40' : isOnline ? 'bg-emerald-400' : 'bg-zinc-600'
                         }`}
                       />
-                      {tgt.status}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Target Parameters */}
-                <div className="space-y-2.5 text-xs font-mono">
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-500">Endereço / Host:</span>
-                    <span className="text-cyan-300 font-semibold">{tgt.address}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-500">Última Conexão:</span>
-                    <span className="text-zinc-300">{tgt.lastConnection}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-500">Latência:</span>
-                    <span className={isOnline ? 'text-emerald-400 font-semibold' : 'text-zinc-600'}>
-                      {isOnline ? `${tgt.latencyMs || 1} ms` : 'Inacessível'}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="text-zinc-500 block mb-1">Ambiente de Execução:</span>
-                    <div className="p-2 bg-[#07090f] border border-[#161d2b] rounded-xl text-zinc-300 text-xs">
-                      {tgt.environment}
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-zinc-500 block mb-1">Notas de Segurança:</span>
-                    <div className="p-2 bg-[#07090f] border border-[#161d2b] rounded-xl text-zinc-400 text-xs leading-relaxed">
-                      {tgt.notes}
-                    </div>
-                  </div>
-
-                  {tgt.openPorts.length > 0 && (
-                    <div className="flex items-center gap-1.5 pt-1">
-                      <span className="text-zinc-500 text-[10px]">Portas Abertas:</span>
-                      {tgt.openPorts.map((p) => (
-                        <span
-                          key={p}
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-[#101724] text-cyan-300 border border-cyan-800/40"
-                        >
-                          :{p}
+                      <span className="font-mono text-white">{tgt.name}</span>
+                      {isActive && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+                          ATIVO
                         </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+                      )}
+                    </td>
 
-              {/* Bottom Actions for Target */}
-              <div className="pt-4 mt-4 border-t border-[#18202e] flex items-center justify-between gap-2 font-mono">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => pingTarget(tgt.id)}
-                    className="px-3 py-1.5 rounded-full bg-[#121722] hover:bg-[#1a2334] text-cyan-300 border border-cyan-800/40 text-xs transition-colors flex items-center gap-1"
-                  >
-                    <Radio className="w-3 h-3" />
-                    <span>Ping</span>
-                  </button>
+                    {/* Tipo */}
+                    <td className="py-2.5 px-3 text-amber-400/90 font-mono text-[11px]">
+                      {tgt.type}
+                    </td>
 
-                  <button
-                    onClick={() => toggleTargetStatus(tgt.id)}
-                    className="px-3 py-1.5 rounded-full bg-[#121722] hover:bg-[#1a2334] text-zinc-300 border border-zinc-700/40 text-xs transition-colors flex items-center gap-1"
-                  >
-                    <Power className="w-3 h-3 text-amber-400" />
-                    <span>Alternar Estado</span>
-                  </button>
-                </div>
+                    {/* IP/Host */}
+                    <td className="py-2.5 px-3 text-cyan-300 font-mono text-[11px]">
+                      {tgt.address}
+                    </td>
 
-                {!isActive ? (
-                  <button
-                    onClick={() => setActiveTarget(tgt)}
-                    className="px-3.5 py-1.5 rounded-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs transition-all shadow-sm font-sans"
-                  >
-                    Vincular ao Projeto
-                  </button>
-                ) : (
-                  <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-semibold">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Vinculado
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })}
+                    {/* Status */}
+                    <td className="py-2.5 px-3">
+                      <span className={`text-[10px] px-2 py-0.5 rounded border font-bold uppercase ${statusColor}`}>
+                        {tgt.status}
+                      </span>
+                    </td>
+
+                    {/* Latência */}
+                    <td className="py-2.5 px-3 text-[11px] font-mono">
+                      {tgt.latencyMs ? (
+                        <span className="text-emerald-400 font-bold">{tgt.latencyMs} ms</span>
+                      ) : (
+                        <span className="text-zinc-600">—</span>
+                      )}
+                    </td>
+
+                    {/* Último Check */}
+                    <td className="py-2.5 px-3 text-zinc-400 text-[11px] font-mono">
+                      {tgt.lastConnection}
+                    </td>
+
+                    {/* AÇÕES: Ping, Conectar Terminal, Definir como Alvo Ativo, Inspecionar Portas, Remover */}
+                    <td className="py-2.5 px-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* Ping */}
+                        <button
+                          onClick={() => handlePing(tgt.id, tgt.name)}
+                          className="p-1 rounded bg-[#0c121c] hover:bg-[#152030] text-cyan-400 border border-cyan-800/40 transition-colors"
+                          title="Ping ICMP"
+                        >
+                          <Radio className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Conectar Terminal */}
+                        <button
+                          onClick={() => handleConnectTerminal(tgt)}
+                          className="p-1 rounded bg-[#0c121c] hover:bg-[#152030] text-emerald-400 border border-emerald-800/40 transition-colors"
+                          title="Conectar Terminal Kali"
+                        >
+                          <Terminal className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Inspecionar Portas */}
+                        <button
+                          onClick={() => setInspectTarget(tgt)}
+                          className="px-2 py-1 rounded bg-[#0c121c] hover:bg-[#152030] text-zinc-300 hover:text-white border border-[#1a2538] transition-colors text-[10px]"
+                          title="Inspecionar Portas e Serviços"
+                        >
+                          Portas
+                        </button>
+
+                        {/* Definir como Alvo Ativo */}
+                        <button
+                          onClick={() => handleSetActive(tgt)}
+                          disabled={isActive}
+                          className={`px-2 py-1 rounded text-[10px] font-bold transition-colors ${
+                            isActive
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-default'
+                              : 'bg-amber-500 hover:bg-amber-400 text-black shadow-sm'
+                          }`}
+                        >
+                          {isActive ? 'SELECIONADO' : 'ATIVAR'}
+                        </button>
+
+                        {/* Remover */}
+                        <button
+                          onClick={() => handleDelete(tgt.id, tgt.name)}
+                          className="p-1 rounded bg-[#0c121c] hover:bg-rose-950/40 text-zinc-500 hover:text-rose-400 border border-transparent hover:border-rose-800/40 transition-colors"
+                          title="Remover alvo"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Add Target Modal */}
-      {newTargetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#0c1018] border border-[#222c3e] rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 font-sans text-xs">
-            <h3 className="text-sm font-bold text-white uppercase font-mono">ADICIONAR NÓ DE TESTE LAB</h3>
-            <p className="text-zinc-400">Insira as configurações do sandbox virtual isolado.</p>
-
-            <div className="space-y-3 font-mono">
+      {/* Port Inspection Modal */}
+      {inspectTarget && (
+        <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0b0f17] border border-[#1e2a3c] rounded-xl p-5 w-full max-w-md space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#182234]">
               <div>
-                <label className="block text-zinc-400 text-[11px] mb-1">Nome do Nó:</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="ex: LAB-SRV-WIN11-02"
-                  className="w-full bg-[#07090f] border border-[#1d2638] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
-                />
+                <span className="text-[10px] text-zinc-500 uppercase font-bold">Inspeção de Portas</span>
+                <h3 className="text-sm font-bold text-white font-mono">{inspectTarget.name} ({inspectTarget.address})</h3>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-800/40">
+                SANDBOX SCAN
+              </span>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="p-2.5 rounded bg-[#07090e] border border-[#162030] flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-cyan-400">Porta 22/tcp</span>
+                  <div className="text-[10px] text-zinc-500">OpenSSH 9.6p1 (Ubuntu)</div>
+                </div>
+                <span className="text-[10px] text-emerald-400 font-bold">ABERTA</span>
               </div>
 
-              <div>
-                <label className="block text-zinc-400 text-[11px] mb-1">Endereço Loopback / Host:</label>
-                <input
-                  type="text"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="ex: 127.0.0.1:8088"
-                  className="w-full bg-[#07090f] border border-[#1d2638] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-400"
-                />
+              <div className="p-2.5 rounded bg-[#07090e] border border-[#162030] flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-amber-400">Porta 80/tcp</span>
+                  <div className="text-[10px] text-zinc-500">nginx/1.24.0 (Sandbox Proxy)</div>
+                </div>
+                <span className="text-[10px] text-emerald-400 font-bold">ABERTA</span>
               </div>
 
-              <div>
-                <label className="block text-zinc-400 text-[11px] mb-1">Tipo de Ambiente:</label>
-                <select
-                  value={type}
-                  onChange={(e) => setType(e.target.value as LabTarget['type'])}
-                  className="w-full bg-[#07090f] border border-[#1d2638] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
-                >
-                  <option value="LOCAL SANDBOX">LOCAL SANDBOX</option>
-                  <option value="TRAINING VM">TRAINING VM</option>
-                  <option value="TEST ENVIRONMENT">TEST ENVIRONMENT</option>
-                  <option value="CTF DRILL NODE">CTF DRILL NODE</option>
-                </select>
+              <div className="p-2.5 rounded bg-[#07090e] border border-[#162030] flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-purple-400">Porta 8888/tcp</span>
+                  <div className="text-[10px] text-zinc-500">SysTest Agent Mock Loopback</div>
+                </div>
+                <span className="text-[10px] text-emerald-400 font-bold">FILTRADA</span>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-[#1e2738]">
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#182234]">
               <button
+                onClick={() => setInspectTarget(null)}
+                className="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cadastrar Alvo Modal */}
+      {newTargetModal && (
+        <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
+          <form
+            onSubmit={handleCreateTarget}
+            className="bg-[#0b0f17] border border-[#1e2a3c] rounded-xl p-5 w-full max-w-md space-y-4 shadow-2xl"
+          >
+            <div className="pb-3 border-b border-[#182234]">
+              <h3 className="text-sm font-bold text-white uppercase font-mono">Cadastrar Alvo no Laboratório</h3>
+              <p className="text-xs text-zinc-400 font-sans mt-0.5">
+                Defina os parâmetros do host de simulação no ambiente airgapped.
+              </p>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-[11px] text-zinc-400 uppercase font-bold block mb-1">
+                  Nome do Alvo:
+                </label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="ex: LAB-DOCKER-NODE-02"
+                  className="w-full bg-[#07090e] border border-[#1a2538] rounded p-2 text-white focus:outline-none focus:border-amber-400"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] text-zinc-400 uppercase font-bold block mb-1">
+                  Tipo:
+                </label>
+                <select
+                  value={newType}
+                  onChange={(e) => setNewType(e.target.value)}
+                  className="w-full bg-[#07090e] border border-[#1a2538] rounded p-2 text-zinc-200"
+                >
+                  <option value="Linux">Linux</option>
+                  <option value="Windows">Windows</option>
+                  <option value="Container">Container</option>
+                  <option value="API">API</option>
+                  <option value="Web Server">Web Server</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] text-zinc-400 uppercase font-bold block mb-1">
+                  Endereço IP ou Hostname:
+                </label>
+                <input
+                  type="text"
+                  value={newHost}
+                  onChange={(e) => setNewHost(e.target.value)}
+                  placeholder="ex: 192.168.10.120 ou 127.0.0.1:9090"
+                  className="w-full bg-[#07090e] border border-[#1a2538] rounded p-2 text-white focus:outline-none focus:border-cyan-400"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-[#182234]">
+              <button
+                type="button"
                 onClick={() => setNewTargetModal(false)}
-                className="px-4 py-2 rounded-full bg-[#121722] hover:bg-[#1a2232] text-zinc-400 hover:text-white transition-colors"
+                className="px-3 py-1.5 rounded bg-[#131924] text-zinc-400 hover:text-white text-xs"
               >
                 Cancelar
               </button>
               <button
-                onClick={() => {
-                  if (name.trim()) {
-                    targets.push({
-                      id: 'lab-target-' + Date.now(),
-                      name: name.trim().toUpperCase(),
-                      address: address.trim() || '127.0.0.1:9090',
-                      type,
-                      status: 'ONLINE',
-                      lastConnection: 'Agora mesmo',
-                      environment: 'Isolated Local Drill VM',
-                      notes: 'Nó configurado para simulações de laboratório.',
-                      latencyMs: 2,
-                      openPorts: [8080],
-                    });
-                    addNotification('Nó Adicionado', `Nó ${name} configurado no laboratório.`, 'success');
-                    setNewTargetModal(false);
-                    setName('');
-                    setAddress('');
-                  }
-                }}
-                className="px-4 py-2 rounded-full bg-[#f59e0b] hover:bg-[#d97706] text-black font-bold transition-all shadow-md"
+                type="submit"
+                className="px-4 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs"
               >
-                Salvar Nó
+                Cadastrar Alvo
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
     </div>

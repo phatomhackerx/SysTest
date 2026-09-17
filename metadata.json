@@ -1,6 +1,6 @@
 {
-  "name": "WATSON Security Toolkit",
-  "description": "Plataforma moderna de investigação corporativa, inteligência de dados (CNPJ/QSA) e laboratório de segurança cibernética com design moderno Sr. Watson.",
+  "name": "SysTest",
+  "description": "Visual Security Laboratory - Workstation visual de cybersecurity inspirada no Kali Linux para construção, validação, análise e execução de tarefas de segurança em ambientes de laboratório autorizados.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

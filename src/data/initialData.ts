@@ -607,18 +607,18 @@ export const INITIAL_WORKFLOW_CONNECTIONS: WorkflowConnection[] = [
 export const INITIAL_TERMINAL_TABS: TerminalTab[] = [
   {
     id: 'tab-watson',
-    name: 'watson@lab',
+    name: 'systest@lab',
     cwd: '~/projects/CORP-DRILL-AUTH-SIM',
     lines: [
       {
         id: 'l-0',
-        text: '┌─ WATSON SECURITY TOOLKIT v2.4.1 (x86_64-kali-linux-gnu) ───┐',
+        text: '┌─ SYSTEST TERMINAL v0.1 (x86_64-kali-linux-gnu) ────────────────┐',
         type: 'system',
         timestamp: '14:15:00',
       },
       {
         id: 'l-1',
-        text: '│ Type "help" for available commands. Sandbox isolation is active. │',
+        text: '│ Type "help" or "ajuda" for available commands. Sandbox active.  │',
         type: 'system',
         timestamp: '14:15:00',
       },
@@ -630,43 +630,37 @@ export const INITIAL_TERMINAL_TABS: TerminalTab[] = [
       },
       {
         id: 'l-3',
-        text: 'watson@lab:~/projects/CORP-DRILL-AUTH-SIM$ validate project',
+        text: 'systest@lab:~/projects/CORP-DRILL-AUTH-SIM$ validate',
         type: 'command',
         timestamp: '14:15:05',
       },
       {
         id: 'l-4',
-        text: '[+] Checking project workspace configuration...',
+        text: '[+] Project detected',
         type: 'output',
         timestamp: '14:15:06',
       },
       {
         id: 'l-5',
-        text: '[+] Checking project directory tree structure (8 files loaded)...',
+        text: '[+] Configuration valid',
         type: 'output',
         timestamp: '14:15:06',
       },
       {
         id: 'l-6',
-        text: '[+] Checking sandbox confinement: cgroups v2 memory cap 512MB verified.',
+        text: '[+] Files validated',
         type: 'output',
         timestamp: '14:15:07',
       },
       {
         id: 'l-7',
-        text: '[!] Notice: missing optional asset favicon.ico in project root.',
-        type: 'warn',
+        text: '[+] Sandbox confirmed: cgroups v2 memory cap 512MB verified',
+        type: 'output',
         timestamp: '14:15:07',
       },
       {
         id: 'l-8',
-        text: '[+] Sandbox environment detected: LAB-TARGET-01 [127.0.0.1:8888] ONLINE',
-        type: 'success',
-        timestamp: '14:15:08',
-      },
-      {
-        id: 'l-9',
-        text: 'STATUS: READY - Pipeline ready for build.',
+        text: 'STATUS: READY',
         type: 'success',
         timestamp: '14:15:08',
       },

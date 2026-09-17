@@ -1,401 +1,435 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useWatson } from '../../context/WatsonContext';
 import {
-  Heading,
-  Type,
-  MousePointerClick,
-  FormInput,
-  Image as ImageIcon,
-  Table as TableIcon,
-  Code2,
-  AlertTriangle,
-  Activity,
-  Plus,
-  Copy,
-  Trash2,
-  ArrowUp,
-  ArrowDown,
-  Eye,
-  CheckCircle2,
-  Download,
-  Shield,
   Layers,
+  FileCode,
+  Save,
+  Send,
+  CheckCircle2,
+  Code2,
+  Layout,
+  Variable,
+  Eye,
+  Shield,
+  AlertTriangle,
+  Server,
+  FileCheck,
+  Terminal,
+  Activity,
+  Copy,
 } from 'lucide-react';
-import { TemplateComponent } from '../../types';
+
+type TemplateCategory =
+  | 'Phishing Simulation'
+  | 'Security Awareness'
+  | 'Data Validation'
+  | 'Network Test'
+  | 'Audit Script';
+
+interface TemplatePreset {
+  id: string;
+  category: TemplateCategory;
+  name: string;
+  description: string;
+  code: string;
+}
+
+const PRESETS: TemplatePreset[] = [
+  {
+    id: 'phish-sim-01',
+    category: 'Phishing Simulation',
+    name: 'Alerta de Redefinição de Credenciais (Simulação)',
+    description: 'Template educativo simulando comunicado interno de redefinição mandatória de senha corporativa.',
+    code: `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Simulação de Segurança - {{company}}</title>
+  <style>
+    body { font-family: sans-serif; background: #0b0f17; color: #e2e8f0; padding: 24px; }
+    .card { background: #131b28; border: 1px solid #1e293b; padding: 20px; border-radius: 8px; max-width: 520px; margin: auto; }
+    .badge { background: #d97706; color: #000; padding: 3px 8px; font-weight: bold; border-radius: 4px; font-size: 11px; }
+    .btn { background: #f59e0b; color: #000; font-weight: bold; padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="badge">SIMULAÇÃO CONTROLADA [{{campaign_id}}]</span>
+    <h2>Aviso de Segurança: {{company}}</h2>
+    <p>Olá <strong>{{target_name}}</strong> (Estação: {{target_ip}}),</p>
+    <p>Um acesso não reconhecido tentou sincronizar os certificados da sua conta. Por política de segurança, revalide suas credenciais em ambiente de testes.</p>
+    <a href="#" class="btn">Revalidar em Sandbox</a>
+    <p style="font-size: 11px; color: #94a3b8; margin-top: 20px;">
+      Alvo: {{target_name}} | Payload: {{custom_payload}}
+    </p>
+  </div>
+</body>
+</html>`,
+  },
+  {
+    id: 'sec-aware-01',
+    category: 'Security Awareness',
+    name: 'Boletim Interno: Política de Senhas Fortes',
+    description: 'Comunicação institucional de conscientização com regras de entropia e verificação em duas etapas.',
+    code: `# BOLETIM DE CONSCIENTIZAÇÃO EM SEGURANÇA
+Organização: {{company}}
+Identificador de Campanha: {{campaign_id}}
+Destinatário / Estação: {{target_name}} (IP: {{target_ip}})
+
+## Diretrizes de Proteção Corporativa
+1. Nunca compartilhe credenciais via canais não criptografados.
+2. Certifique-se de que a autenticação multifator (MFA) está ativa.
+3. Teste de conformidade técnica associado: {{custom_payload}}
+
+Laboratório Autorizado - SysTest v2.4`,
+  },
+  {
+    id: 'data-val-01',
+    category: 'Data Validation',
+    name: 'Schema Validator: Sanitização de Payload JSON',
+    description: 'Validador estruturado para testar integridade de campos e hashes de payloads recebidos.',
+    code: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DataValidation_{{campaign_id}}",
+  "target": {
+    "name": "{{target_name}}",
+    "ip": "{{target_ip}}",
+    "organization": "{{company}}"
+  },
+  "payloadVerification": {
+    "command": "{{custom_payload}}",
+    "expectedExitCode": 0,
+    "airgapPolicyEnforced": true
+  }
+}`,
+  },
+  {
+    id: 'net-test-01',
+    category: 'Network Test',
+    name: 'Script de Sondagem de Portas Locais (Sandbox)',
+    description: 'Sondagem controlada de serviços locais rodando no alvo especificado.',
+    code: `#!/usr/bin/env bash
+# Teste de Rede Local Sandbox
+# Alvo: {{target_name}} | IP: {{target_ip}} | Campanha: {{campaign_id}}
+echo "[*] Iniciando sondagem de integridade em {{target_ip}}..."
+echo "[*] Organização: {{company}}"
+echo "[*] Executando comando de validação: {{custom_payload}}"
+nc -zv -w 2 {{target_ip}} 80 443 8080 8888
+echo "[+] Concluído com sucesso no ambiente SysTest."`,
+  },
+  {
+    id: 'audit-01',
+    category: 'Audit Script',
+    name: 'Auditoria de Conformidade e Permissões',
+    description: 'Script para verificação de privilégios e permissões no host alvo do laboratório.',
+    code: `#!/usr/bin/env bash
+# Auditoria de Conformidade SysTest
+# ID: {{campaign_id}} | Host: {{target_name}} ({{target_ip}})
+echo "=== SysTest Security Audit ==="
+echo "Target: {{target_name}} | {{target_ip}}"
+echo "Company: {{company}}"
+echo "Testing: {{custom_payload}}"
+find /tmp /var/tmp -type f -perm -0002 2>/dev/null
+echo "[+] Auditoria finalizada."`,
+  },
+];
 
 export const TemplateBuilderView: React.FC = () => {
-  const {
-    templateComponents,
-    selectedTemplateComponentId,
-    setSelectedTemplateComponentId,
-    addTemplateComponent,
-    updateTemplateComponent,
-    removeTemplateComponent,
-    moveTemplateComponent,
-    duplicateTemplateComponent,
-    runPreview,
-    runValidation,
-    runExport,
-  } = useWatson();
+  const { createFile, runBuild, addNotification, activeTarget } = useWatson();
 
-  const paletteItems: {
-    type: TemplateComponent['type'];
-    label: string;
-    icon: React.ReactNode;
-    desc: string;
-  }[] = [
-    { type: 'Header', label: 'Cabeçalho', icon: <Heading className="w-4 h-4 text-amber-400" />, desc: 'Banner & logotipo institucional' },
-    { type: 'Text', label: 'Texto', icon: <Type className="w-4 h-4 text-zinc-300" />, desc: 'Parágrafo instrutivo de conscientização' },
-    { type: 'Button', label: 'Botão', icon: <MousePointerClick className="w-4 h-4 text-cyan-400" />, desc: 'Disparador ou ação de resposta' },
-    { type: 'Form', label: 'Formulário', icon: <FormInput className="w-4 h-4 text-amber-400" />, desc: 'Simulação de credencial em sandbox' },
-    { type: 'Image', label: 'Imagem', icon: <ImageIcon className="w-4 h-4 text-zinc-400" />, desc: 'Crachá ou marca corporativa' },
-    { type: 'Table', label: 'Tabela', icon: <TableIcon className="w-4 h-4 text-cyan-400" />, desc: 'Checklist de matriz ou telemetria' },
-    { type: 'Code Block', label: 'Bloco de Código', icon: <Code2 className="w-4 h-4 text-emerald-400" />, desc: 'Script e instrução técnica' },
-    { type: 'Warning', label: 'Aviso', icon: <AlertTriangle className="w-4 h-4 text-amber-400" />, desc: 'Notificação de simulação segura' },
-    { type: 'Status', label: 'Status', icon: <Activity className="w-4 h-4 text-emerald-400" />, desc: 'Indicador de sandbox em loopback' },
+  const [selectedCategory, setSelectedCategory] = useState<TemplateCategory>('Phishing Simulation');
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('phish-sim-01');
+
+  // Structured Form Variables
+  const [variables, setVariables] = useState({
+    target_name: 'LAB-TARGET-01',
+    target_ip: '127.0.0.1',
+    company: 'Empresa Demo Corp',
+    campaign_id: 'CAMP-2026-A1',
+    custom_payload: 'systest-agent --verify-auth --strict',
+  });
+
+  const [editorMode, setEditorMode] = useState<'visual' | 'code'>('code');
+  const [customCode, setCustomCode] = useState<string>(PRESETS[0].code);
+
+  const categories: { id: TemplateCategory; label: string; icon: React.ReactNode }[] = [
+    { id: 'Phishing Simulation', label: 'Phishing Simulation', icon: <AlertTriangle className="w-4 h-4 text-amber-400" /> },
+    { id: 'Security Awareness', label: 'Security Awareness', icon: <Shield className="w-4 h-4 text-cyan-400" /> },
+    { id: 'Data Validation', label: 'Data Validation', icon: <FileCheck className="w-4 h-4 text-emerald-400" /> },
+    { id: 'Network Test', label: 'Network Test', icon: <Server className="w-4 h-4 text-indigo-400" /> },
+    { id: 'Audit Script', label: 'Audit Script', icon: <Terminal className="w-4 h-4 text-rose-400" /> },
   ];
 
-  const selectedItem = templateComponents.find((c) => c.id === selectedTemplateComponentId);
+  const handleSelectPreset = (preset: TemplatePreset) => {
+    setSelectedPresetId(preset.id);
+    setSelectedCategory(preset.category);
+    setCustomCode(preset.code);
+  };
+
+  // Replaced real-time preview text
+  const evaluatedOutput = useMemo(() => {
+    let text = customCode;
+    text = text.replace(/\{\{target_name\}\}/g, variables.target_name);
+    text = text.replace(/\{\{target_ip\}\}/g, variables.target_ip);
+    text = text.replace(/\{\{company\}\}/g, variables.company);
+    text = text.replace(/\{\{campaign_id\}\}/g, variables.campaign_id);
+    text = text.replace(/\{\{custom_payload\}\}/g, variables.custom_payload);
+    return text;
+  }, [customCode, variables]);
+
+  // Action: Salvar Template
+  const handleSaveTemplate = () => {
+    addNotification('Template Salvo', `Template "${selectedPresetId}" atualizado com sucesso.`, 'success');
+  };
+
+  // Action: Gerar Arquivo
+  const handleGenerateFile = () => {
+    const ext = customCode.startsWith('<!DOCTYPE') || customCode.startsWith('<html') ? 'html' : customCode.startsWith('{') ? 'json' : 'sh';
+    const fileName = `template_${variables.campaign_id.toLowerCase().replace(/[^a-z0-9]/g, '_')}.${ext}`;
+    createFile(null, fileName, 'file');
+    addNotification('Arquivo Gerado', `${fileName} foi criado na árvore de arquivos do projeto.`, 'success');
+  };
+
+  // Action: Enviar para Lab
+  const handleSendToLab = () => {
+    runBuild();
+    addNotification('Enviado para o Lab', `Artefato despachado para o sandbox no alvo ${activeTarget.name}`, 'info');
+  };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-black overflow-hidden font-sans text-zinc-300">
-      {/* Disclaimer Banner */}
-      <div className="px-6 py-2.5 bg-[#090c13] border-b border-amber-500/20 flex items-center justify-between text-amber-300 select-none">
-        <div className="flex items-center gap-2.5">
-          <Shield className="w-4 h-4 text-amber-400 shrink-0" />
-          <span className="font-semibold tracking-wide text-xs">
-            AMBIENTE DE LABORATÓRIO AUTORIZADO: Templates projetados estritamente para conscientização e testes controlados.
-          </span>
-        </div>
-        <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono font-bold">
-          AIRGAP ATIVO
-        </span>
-      </div>
-
-      {/* Top Action Bar */}
-      <div className="h-14 px-6 border-b border-[#18202f] bg-[#090c13] flex items-center justify-between select-none shrink-0">
-        <div className="flex items-center gap-2 font-mono text-xs">
-          <span className="text-[10px] text-zinc-500 uppercase font-bold mr-1">AÇÕES:</span>
-          <button
-            onClick={() => selectedTemplateComponentId && duplicateTemplateComponent(selectedTemplateComponentId)}
-            disabled={!selectedTemplateComponentId}
-            className="px-3 py-1.5 rounded-full bg-[#101724] hover:bg-[#182234] text-zinc-300 border border-[#1e2738] flex items-center gap-1.5 disabled:opacity-30 transition-colors text-xs"
-          >
-            <Copy className="w-3.5 h-3.5 text-cyan-400" />
-            <span>DUPLICAR</span>
-          </button>
-          <button
-            onClick={() => selectedTemplateComponentId && removeTemplateComponent(selectedTemplateComponentId)}
-            disabled={!selectedTemplateComponentId}
-            className="px-3 py-1.5 rounded-full bg-[#101724] hover:bg-[#182234] text-rose-300 border border-[#1e2738] flex items-center gap-1.5 disabled:opacity-30 transition-colors text-xs"
-          >
-            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-            <span>EXCLUIR</span>
-          </button>
-          <button
-            onClick={() => selectedTemplateComponentId && moveTemplateComponent(selectedTemplateComponentId, 'up')}
-            disabled={!selectedTemplateComponentId}
-            className="p-1.5 rounded-full bg-[#101724] hover:bg-[#182234] text-zinc-300 border border-[#1e2738] disabled:opacity-30 transition-colors"
-            title="Mover para cima"
-          >
-            <ArrowUp className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => selectedTemplateComponentId && moveTemplateComponent(selectedTemplateComponentId, 'down')}
-            disabled={!selectedTemplateComponentId}
-            className="p-1.5 rounded-full bg-[#101724] hover:bg-[#182234] text-zinc-300 border border-[#1e2738] disabled:opacity-30 transition-colors"
-            title="Mover para baixo"
-          >
-            <ArrowDown className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2 font-mono text-xs">
-          <button
-            onClick={runPreview}
-            className="px-3.5 py-1.5 rounded-full bg-[#101724] hover:bg-[#182234] text-cyan-300 border border-cyan-800/40 flex items-center gap-1.5 transition-colors font-semibold"
-          >
-            <Eye className="w-3.5 h-3.5 text-cyan-400" />
-            <span>PREVIEW</span>
-          </button>
-          <button
-            onClick={runValidation}
-            className="px-3.5 py-1.5 rounded-full bg-[#101724] hover:bg-[#182234] text-emerald-300 border border-emerald-800/40 flex items-center gap-1.5 transition-colors font-semibold"
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>VALIDAR</span>
-          </button>
-          <button
-            onClick={runExport}
-            className="px-4 py-1.5 rounded-full bg-[#f59e0b] hover:bg-[#d97706] text-black font-bold flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(245,158,11,0.25)]"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>EXPORTAR</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Main 3-Column Split */}
+    <div className="flex-1 flex flex-col h-full bg-[#05070a] overflow-hidden font-mono select-none">
+      {/* 3-Panel Main Layout */}
       <div className="flex-1 flex min-h-0">
-        {/* LEFT: Components Palette */}
-        <div className="w-64 bg-[#080b12] border-r border-[#18202f] flex flex-col shrink-0 select-none">
-          <div className="px-4 py-3 border-b border-[#18202f] bg-[#0c1018]">
-            <span className="font-bold text-xs text-white tracking-wide uppercase font-mono">COMPONENTES</span>
+        {/* PAINEL DE CATEGORIAS (Esquerdo) */}
+        <div className="w-64 bg-[#07090e] border-r border-[#161f2e] flex flex-col shrink-0">
+          <div className="h-10 px-3 border-b border-[#161f2e] bg-[#090d14] flex items-center justify-between">
+            <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
+              CATEGORIAS DE TEMPLATE
+            </span>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {paletteItems.map((item) => (
+          <div className="p-2 space-y-1 overflow-y-auto">
+            {categories.map((cat) => (
               <button
-                key={item.type}
-                onClick={() => addTemplateComponent(item.type)}
-                className="w-full flex items-center justify-between p-2.5 rounded-xl bg-[#0e131d] hover:bg-[#151c2a] border border-[#1a2232] hover:border-amber-500/40 text-left transition-all group"
+                key={cat.id}
+                onClick={() => {
+                  setSelectedCategory(cat.id);
+                  const firstOfCat = PRESETS.find((p) => p.category === cat.id);
+                  if (firstOfCat) handleSelectPreset(firstOfCat);
+                }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-xs transition-colors text-left ${
+                  selectedCategory === cat.id
+                    ? 'bg-[#121927] text-white font-bold border border-amber-500/40 text-amber-300'
+                    : 'text-zinc-400 hover:bg-[#0b0f17] hover:text-white'
+                }`}
               >
-                <div className="flex items-center gap-2.5">
-                  <div className="p-1.5 rounded-lg bg-[#141b27] border border-[#1e2738]">
-                    {item.icon}
-                  </div>
-                  <div>
-                    <div className="font-semibold text-white group-hover:text-amber-300 text-xs">
-                      {item.label}
-                    </div>
-                    <div className="text-[10px] text-zinc-500">{item.desc}</div>
-                  </div>
-                </div>
-                <Plus className="w-3.5 h-3.5 text-zinc-500 group-hover:text-amber-400 transition-colors" />
+                {cat.icon}
+                <span className="text-xs truncate">{cat.label}</span>
               </button>
             ))}
           </div>
 
-          <div className="p-3 border-t border-[#18202f] bg-[#0c1018] text-[11px] text-zinc-500">
-            Clique no componente para anexar à tela de composição.
+          <div className="px-3 pt-3 pb-1 border-t border-[#161f2e] text-[10px] text-zinc-500 uppercase font-bold">
+            PRESETS DISPONÍVEIS
+          </div>
+
+          <div className="flex-1 p-2 space-y-1 overflow-y-auto">
+            {PRESETS.filter((p) => p.category === selectedCategory).map((preset) => (
+              <button
+                key={preset.id}
+                onClick={() => handleSelectPreset(preset)}
+                className={`w-full p-2 rounded text-left border transition-colors ${
+                  selectedPresetId === preset.id
+                    ? 'bg-[#101726] border-amber-500/40 text-amber-300'
+                    : 'bg-[#090d14] border-[#141c2b] text-zinc-400 hover:text-white hover:bg-[#0d131f]'
+                }`}
+              >
+                <div className="font-bold text-xs truncate">{preset.name}</div>
+                <div className="text-[10px] text-zinc-500 line-clamp-2 mt-0.5">{preset.description}</div>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* CENTER: Composition Canvas */}
-        <div className="flex-1 bg-black watson-grid-bg p-6 overflow-y-auto flex flex-col items-center">
-          <div className="w-full max-w-2xl bg-[#0b0e15] border border-[#1a2232] rounded-2xl shadow-2xl overflow-hidden">
-            {/* Canvas Header Bar */}
-            <div className="px-5 py-3 bg-[#0e121a] border-b border-[#18202f] flex items-center justify-between select-none">
-              <div className="flex items-center gap-2.5">
-                <Layers className="w-4 h-4 text-amber-400" />
-                <span className="font-bold text-white text-xs font-mono uppercase">TELA DE COMPOSIÇÃO</span>
-                <span className="text-[10px] text-zinc-500 font-mono">({templateComponents.length} itens)</span>
-              </div>
-              <span className="text-[11px] text-cyan-400 font-mono">127.0.0.1:8888 SANDBOX</span>
+        {/* PAINEL CENTRAL: Formulário Estruturado de Variáveis + Editor Visual / Código */}
+        <div className="flex-1 flex flex-col min-w-0 bg-[#06080d] border-r border-[#161f2e]">
+          {/* Header with Mode Switcher */}
+          <div className="h-10 px-4 border-b border-[#161f2e] bg-[#090d14] flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-white uppercase text-[11px]">
+                VARIÁVEIS & ESTRUTURA DO TEMPLATE
+              </span>
             </div>
 
-            {/* Components Stack */}
-            <div className="p-6 space-y-4">
-              {templateComponents.length === 0 ? (
-                <div className="p-10 border-2 border-dashed border-[#1a2232] rounded-2xl text-center text-zinc-500 font-mono text-xs">
-                  A tela está vazia. Adicione componentes da paleta lateral para montar o template.
-                </div>
-              ) : (
-                templateComponents.map((cmp, idx) => {
-                  const isSelected = selectedTemplateComponentId === cmp.id;
-                  return (
-                    <div
-                      key={cmp.id}
-                      onClick={() => setSelectedTemplateComponentId(cmp.id)}
-                      className={`p-4 rounded-xl border transition-all cursor-pointer relative group ${
-                        isSelected
-                          ? 'border-amber-400 bg-[#121927] shadow-[0_0_15px_rgba(245,158,11,0.15)] ring-1 ring-amber-400/40'
-                          : 'border-[#18202e] bg-[#080b11] hover:border-[#253247]'
-                      }`}
-                    >
-                      {/* Component badge */}
-                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#151c2a] text-[10px] font-mono text-zinc-500">
-                        <span className="font-semibold text-amber-400">
-                          #{idx + 1} [{cmp.type.toUpperCase()}] {cmp.label}
-                        </span>
-                        <span className="opacity-0 group-hover:opacity-100 text-zinc-400 transition-opacity">
-                          Clique para inspecionar
-                        </span>
-                      </div>
-
-                      {/* Render Visual Representation */}
-                      {cmp.type === 'Header' && (
-                        <div>
-                          <h2 className="text-base font-bold text-white font-sans">{cmp.properties.title || 'Título do Cabeçalho'}</h2>
-                          {cmp.properties.caption && (
-                            <p className="text-xs text-zinc-400 mt-1">{cmp.properties.caption}</p>
-                          )}
-                        </div>
-                      )}
-
-                      {cmp.type === 'Warning' && (
-                        <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 text-amber-300 flex items-center gap-2.5 text-xs">
-                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                          <span>{cmp.properties.content || 'Texto de alerta de segurança'}</span>
-                        </div>
-                      )}
-
-                      {cmp.type === 'Text' && (
-                        <p className="text-zinc-300 leading-relaxed text-xs">
-                          {cmp.properties.content || 'Parágrafo descritivo de conscientização.'}
-                        </p>
-                      )}
-
-                      {cmp.type === 'Form' && (
-                        <div className="space-y-2.5 bg-[#05070a] p-3.5 rounded-xl border border-[#18202f]">
-                          {(cmp.properties.fields || ['field_1', 'field_2']).map((f, fIdx) => (
-                            <div key={fIdx} className="space-y-1">
-                              <label className="text-[10px] text-zinc-400 font-mono">{f}</label>
-                              <div className="h-8 w-full bg-[#0c1018] rounded-lg border border-[#1d2638] px-2.5 flex items-center text-zinc-600 text-xs font-mono">
-                                [campo simulado de teste]
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {cmp.type === 'Button' && (
-                        <div>
-                          <button className="px-4 py-2 bg-[#f59e0b] text-black font-bold rounded-full text-xs pointer-events-none shadow-md">
-                            {cmp.properties.title || 'Ação do Botão'}
-                          </button>
-                        </div>
-                      )}
-
-                      {cmp.type === 'Code Block' && (
-                        <pre className="p-3 bg-[#05070a] border border-[#18202f] rounded-xl text-emerald-400 text-xs font-mono overflow-x-auto">
-                          <code>{cmp.properties.content || 'echo "[+] simulacao watson"'}</code>
-                        </pre>
-                      )}
-
-                      {cmp.type === 'Status' && (
-                        <div className="flex items-center gap-2 text-cyan-300 text-xs font-mono">
-                          <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                          <span>{cmp.properties.state || 'Sandbox Ativa'}</span>
-                        </div>
-                      )}
-
-                      {cmp.type === 'Table' && (
-                        <div className="border border-[#18202f] rounded-xl overflow-hidden text-xs">
-                          <div className="bg-[#0e131d] p-2 font-semibold text-white flex justify-between font-mono">
-                            <span>{cmp.properties.caption || 'Checklist de Vetores'}</span>
-                            <span className="text-cyan-400">STATUS</span>
-                          </div>
-                          <div className="p-3 text-zinc-400 space-y-1.5 bg-[#05070a] font-mono text-[11px]">
-                            <div className="flex justify-between"><span>RFC-1122 Loopback</span><span className="text-emerald-400">APLICADO</span></div>
-                            <div className="flex justify-between"><span>Egress Externo</span><span className="text-rose-400">BLOQUEADO</span></div>
-                          </div>
-                        </div>
-                      )}
-
-                      {cmp.type === 'Image' && (
-                        <div className="h-20 bg-[#05070a] border border-dashed border-[#1d2638] rounded-xl flex items-center justify-center text-zinc-500 gap-2 text-xs">
-                          <ImageIcon className="w-4 h-4 text-amber-400/70" />
-                          <span>Container de Imagem / Logotipo</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
+            <div className="flex items-center gap-1 bg-[#05070a] p-0.5 rounded border border-[#182336] text-[11px]">
+              <button
+                onClick={() => setEditorMode('code')}
+                className={`px-2.5 py-0.5 rounded flex items-center gap-1 transition-colors ${
+                  editorMode === 'code' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Code2 className="w-3 h-3" />
+                <span>Editor Código</span>
+              </button>
+              <button
+                onClick={() => setEditorMode('visual')}
+                className={`px-2.5 py-0.5 rounded flex items-center gap-1 transition-colors ${
+                  editorMode === 'visual' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Layout className="w-3 h-3" />
+                <span>Visual</span>
+              </button>
             </div>
           </div>
-        </div>
 
-        {/* RIGHT: Properties Inspector */}
-        <div className="w-80 bg-[#080b12] border-l border-[#18202f] flex flex-col shrink-0 select-none">
-          <div className="px-4 py-3 border-b border-[#18202f] bg-[#0c1018]">
-            <span className="font-bold text-xs text-white tracking-wide uppercase font-mono">INSPETOR DE PROPRIEDADES</span>
+          {/* Variables Configuration Ribbon */}
+          <div className="p-3 bg-[#080c14] border-b border-[#141c2b] space-y-2 text-xs">
+            <div className="flex items-center gap-1.5 text-amber-400 font-bold text-[11px]">
+              <Variable className="w-3.5 h-3.5" />
+              <span>VARIÁVEIS DINÂMICAS DO TEMPLATE</span>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+              <div>
+                <label className="text-[10px] text-zinc-500 block font-bold">{'{{target_name}}'}</label>
+                <input
+                  type="text"
+                  value={variables.target_name}
+                  onChange={(e) => setVariables({ ...variables, target_name: e.target.value })}
+                  className="w-full bg-[#05070b] border border-[#162030] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-zinc-500 block font-bold">{'{{target_ip}}'}</label>
+                <input
+                  type="text"
+                  value={variables.target_ip}
+                  onChange={(e) => setVariables({ ...variables, target_ip: e.target.value })}
+                  className="w-full bg-[#05070b] border border-[#162030] rounded px-2 py-1 text-xs text-cyan-300 focus:outline-none focus:border-cyan-400 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-zinc-500 block font-bold">{'{{company}}'}</label>
+                <input
+                  type="text"
+                  value={variables.company}
+                  onChange={(e) => setVariables({ ...variables, company: e.target.value })}
+                  className="w-full bg-[#05070b] border border-[#162030] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-zinc-500 block font-bold">{'{{campaign_id}}'}</label>
+                <input
+                  type="text"
+                  value={variables.campaign_id}
+                  onChange={(e) => setVariables({ ...variables, campaign_id: e.target.value })}
+                  className="w-full bg-[#05070b] border border-[#162030] rounded px-2 py-1 text-xs text-amber-300 focus:outline-none focus:border-amber-400 font-mono"
+                />
+              </div>
+
+              <div className="col-span-2 lg:col-span-1">
+                <label className="text-[10px] text-zinc-500 block font-bold">{'{{custom_payload}}'}</label>
+                <input
+                  type="text"
+                  value={variables.custom_payload}
+                  onChange={(e) => setVariables({ ...variables, custom_payload: e.target.value })}
+                  className="w-full bg-[#05070b] border border-[#162030] rounded px-2 py-1 text-xs text-emerald-300 focus:outline-none focus:border-emerald-400 font-mono"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono text-xs">
-            {selectedItem ? (
-              <div className="space-y-3.5">
-                <div className="p-3 rounded-xl bg-[#0e131d] border border-[#1a2232]">
-                  <span className="text-[10px] text-zinc-500 uppercase">Elemento Ativo</span>
-                  <div className="font-bold text-amber-400 mt-0.5 font-sans text-sm">{selectedItem.label}</div>
-                  <div className="text-[10px] text-cyan-400 font-mono mt-0.5">ID: {selectedItem.id}</div>
-                </div>
-
-                {/* Properties Inputs */}
-                {selectedItem.properties.title !== undefined && (
-                  <div>
-                    <label className="block text-[11px] text-zinc-400 uppercase mb-1">Título / Texto:</label>
-                    <input
-                      type="text"
-                      value={selectedItem.properties.title}
-                      onChange={(e) => updateTemplateComponent(selectedItem.id, { title: e.target.value })}
-                      className="w-full bg-[#07090f] border border-[#1d2638] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400 font-sans text-xs"
-                    />
-                  </div>
-                )}
-
-                {selectedItem.properties.caption !== undefined && (
-                  <div>
-                    <label className="block text-[11px] text-zinc-400 uppercase mb-1">Subtítulo:</label>
-                    <input
-                      type="text"
-                      value={selectedItem.properties.caption}
-                      onChange={(e) => updateTemplateComponent(selectedItem.id, { caption: e.target.value })}
-                      className="w-full bg-[#07090f] border border-[#1d2638] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400 font-sans text-xs"
-                    />
-                  </div>
-                )}
-
-                {selectedItem.properties.content !== undefined && (
-                  <div>
-                    <label className="block text-[11px] text-zinc-400 uppercase mb-1">Corpo de Conteúdo:</label>
-                    <textarea
-                      rows={4}
-                      value={selectedItem.properties.content}
-                      onChange={(e) => updateTemplateComponent(selectedItem.id, { content: e.target.value })}
-                      className="w-full bg-[#07090f] border border-[#1d2638] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400 font-sans text-xs"
-                    />
-                  </div>
-                )}
-
-                {selectedItem.properties.action !== undefined && (
-                  <div>
-                    <label className="block text-[11px] text-zinc-400 uppercase mb-1">Rota de Destino (Action):</label>
-                    <input
-                      type="text"
-                      value={selectedItem.properties.action}
-                      onChange={(e) => updateTemplateComponent(selectedItem.id, { action: e.target.value })}
-                      className="w-full bg-[#07090f] border border-[#1d2638] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400 font-mono text-xs"
-                    />
-                  </div>
-                )}
-
-                {selectedItem.properties.state !== undefined && (
-                  <div>
-                    <label className="block text-[11px] text-zinc-400 uppercase mb-1">Rótulo de Status:</label>
-                    <input
-                      type="text"
-                      value={selectedItem.properties.state}
-                      onChange={(e) => updateTemplateComponent(selectedItem.id, { state: e.target.value })}
-                      className="w-full bg-[#07090f] border border-[#1d2638] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400 font-mono text-xs"
-                    />
-                  </div>
-                )}
-
-                <div className="pt-2 border-t border-[#18202f] space-y-2">
-                  <span className="text-[10px] text-zinc-500 uppercase">Operações do Componente</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => duplicateTemplateComponent(selectedItem.id)}
-                      className="py-2 px-3 rounded-full bg-[#111724] hover:bg-[#1a2336] text-cyan-300 border border-[#1e2738] text-center transition-colors text-xs"
-                    >
-                      Duplicar
-                    </button>
-                    <button
-                      onClick={() => removeTemplateComponent(selectedItem.id)}
-                      className="py-2 px-3 rounded-full bg-[#111724] hover:bg-[#1a2336] text-rose-400 border border-[#1e2738] text-center transition-colors text-xs"
-                    >
-                      Excluir
-                    </button>
-                  </div>
-                </div>
-              </div>
+          {/* Central Workspace: Visual or Code */}
+          <div className="flex-1 relative flex overflow-hidden">
+            {editorMode === 'code' ? (
+              <textarea
+                value={customCode}
+                onChange={(e) => setCustomCode(e.target.value)}
+                spellCheck={false}
+                className="w-full h-full p-4 bg-[#05070a] text-zinc-200 leading-6 resize-none focus:outline-none font-mono text-xs selection:bg-amber-500/30 selection:text-amber-200"
+              />
             ) : (
-              <div className="text-zinc-600 text-center py-10 font-sans text-xs">
-                Selecione um componente na tela de composição para editar suas propriedades.
+              <div className="w-full h-full p-5 overflow-y-auto space-y-3 bg-[#06080e]">
+                <div className="p-3 bg-[#090d15] border border-[#182336] rounded-lg">
+                  <span className="text-amber-400 font-bold text-xs uppercase block mb-1">
+                    Visual Blocks Inspector
+                  </span>
+                  <p className="text-xs text-zinc-400">
+                    O template está configurado com 5 pontos de injeção dinâmica. Os blocos visuais utilizam o motor de renderização sandbox isolado.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-[#080b12] border border-[#161f2e] rounded-lg">
+                    <span className="text-[10px] text-zinc-500 font-bold uppercase">Categoria Ativa</span>
+                    <div className="text-white font-bold text-sm mt-1">{selectedCategory}</div>
+                  </div>
+                  <div className="p-3 bg-[#080b12] border border-[#161f2e] rounded-lg">
+                    <span className="text-[10px] text-zinc-500 font-bold uppercase">Substituições Pendentes</span>
+                    <div className="text-emerald-400 font-bold text-sm mt-1">5 Variáveis Mapeadas</div>
+                  </div>
+                </div>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* PAINEL LATERAL (Direito): Preview em Tempo Real + Ações */}
+        <div className="w-80 bg-[#07090e] flex flex-col shrink-0 select-none text-xs">
+          <div className="h-10 px-3 border-b border-[#161f2e] bg-[#090d14] flex items-center justify-between">
+            <span className="font-bold text-[11px] text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Eye className="w-3.5 h-3.5 text-cyan-400" />
+              <span>PREVIEW EM TEMPO REAL</span>
+            </span>
+          </div>
+
+          {/* Evaluated Output Preview */}
+          <div className="flex-1 p-3 overflow-y-auto space-y-3">
+            <div className="p-3 bg-[#040608] border border-[#162030] rounded-lg font-mono text-[11px] text-zinc-300 whitespace-pre-wrap break-all leading-relaxed max-h-[380px] overflow-y-auto">
+              {evaluatedOutput}
+            </div>
+
+            <div className="p-2.5 bg-[#090d14] border border-[#161f2e] rounded text-[10px] text-zinc-500 space-y-1">
+              <div className="flex items-center justify-between">
+                <span>Alvo Vinculado:</span>
+                <span className="text-cyan-400 font-bold">{activeTarget.name}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Sanitização:</span>
+                <span className="text-emerald-400 font-bold">AIRGAP STRICT</span>
+              </div>
+            </div>
+
+            {/* Ações: Salvar Template, Gerar Arquivo, Enviar para Lab */}
+            <div className="space-y-2 pt-1">
+              <button
+                onClick={handleSaveTemplate}
+                className="w-full py-2 px-3 rounded bg-[#0e1420] hover:bg-[#152033] border border-amber-500/40 text-amber-300 font-bold flex items-center justify-center gap-2 transition-colors text-xs"
+              >
+                <Save className="w-3.5 h-3.5 text-amber-400" />
+                <span>SALVAR TEMPLATE</span>
+              </button>
+
+              <button
+                onClick={handleGenerateFile}
+                className="w-full py-2 px-3 rounded bg-[#0e1420] hover:bg-[#152033] border border-cyan-800/40 text-cyan-300 font-bold flex items-center justify-center gap-2 transition-colors text-xs"
+              >
+                <FileCode className="w-3.5 h-3.5 text-cyan-400" />
+                <span>GERAR ARQUIVO</span>
+              </button>
+
+              <button
+                onClick={handleSendToLab}
+                className="w-full py-2 px-3 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold flex items-center justify-center gap-2 transition-colors text-xs shadow-sm"
+              >
+                <Send className="w-3.5 h-3.5 fill-black" />
+                <span>ENVIAR PARA LAB</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

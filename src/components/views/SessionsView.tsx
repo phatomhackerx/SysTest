@@ -1,223 +1,361 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useWatson } from '../../context/WatsonContext';
 import {
   Clock,
+  Play,
   Square,
-  Trash2,
   Download,
   Plus,
+  Terminal,
+  FileCode,
+  RotateCcw,
   CheckCircle2,
   AlertTriangle,
   Info,
+  Layers,
+  ChevronRight,
 } from 'lucide-react';
-import { LabSession } from '../../types';
+
+interface DetailedSession {
+  id: string;
+  project: string;
+  target: string;
+  started: string;
+  duration: string;
+  status: 'RUNNING' | 'FINISHED' | 'TERMINATED';
+  commands: string[];
+  logs: { timestamp: string; text: string; level: 'info' | 'warn' | 'success' | 'error' }[];
+  modifiedFiles: string[];
+}
 
 export const SessionsView: React.FC = () => {
-  const {
-    sessions,
-    activeSessionId,
-    setActiveSessionId,
-    stopSession,
-    deleteSession,
-    activeProject,
-    activeTarget,
-    addNotification,
-  } = useWatson();
+  const { activeProject, activeTarget, addNotification } = useWatson();
 
-  const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
-
-  const handleSpawnSession = () => {
-    const id = 'SESS-' + Math.floor(1000 + Math.random() * 9000);
-    const newSess: LabSession = {
-      id,
-      projectId: activeProject.id,
-      targetId: activeTarget.id,
-      started: new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC',
-      duration: '00:00:01',
-      status: 'ACTIVE',
-      events: [
-        {
-          id: 'ev-new-1',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          type: 'INIT',
-          message: `Watson session initialized for ${activeProject.name} -> ${activeTarget.name}`,
-          severity: 'info',
-        },
+  const [sessionList, setSessionList] = useState<DetailedSession[]>([
+    {
+      id: 'SESS-8421',
+      project: 'DRILL-ALPHA-RECON',
+      target: 'LAB-UBUNTU-01 (192.168.10.101)',
+      started: '14:22:10 UTC',
+      duration: '00:18:42',
+      status: 'RUNNING',
+      commands: [
+        'systest target set tgt-ubuntu',
+        'ping 192.168.10.101',
+        'systest validate --strict',
+        'systest run --mode=confinement',
       ],
+      logs: [
+        { timestamp: '14:22:10', text: '[INIT] Sessão alocada em namespace de sandbox cgroups_v2.', level: 'info' },
+        { timestamp: '14:22:15', text: '[NET] Handshake TCP efetuado com 192.168.10.101:22.', level: 'info' },
+        { timestamp: '14:25:30', text: '[AUDIT] Validação sintática AST concluída sem violações.', level: 'success' },
+        { timestamp: '14:32:00', text: '[WARN] Resposta de latência oscilou para 4.8ms.', level: 'warn' },
+        { timestamp: '14:40:52', text: '[EXEC] Payload simulado operando em loopback.', level: 'info' },
+      ],
+      modifiedFiles: [
+        '/scripts/recon_probe.sh',
+        '/configs/network_policy.json',
+        '/output/report_alpha.json',
+      ],
+    },
+    {
+      id: 'SESS-7934',
+      project: 'AWARENESS-CAMPAIGN-04',
+      target: 'LAB-WIN-SANDBOX (192.168.10.105)',
+      started: '11:10:04 UTC',
+      duration: '00:45:10',
+      status: 'FINISHED',
+      commands: [
+        'systest build',
+        'systest scan',
+        'systest export --target=LAB-WIN-SANDBOX',
+      ],
+      logs: [
+        { timestamp: '11:10:04', text: '[INIT] Ambiente isolado instanciado.', level: 'info' },
+        { timestamp: '11:15:22', text: '[SCAN] 4 achados remediados automaticamente.', level: 'success' },
+        { timestamp: '11:55:14', text: '[END] Execução finalizada com código 0 (sucesso).', level: 'success' },
+      ],
+      modifiedFiles: [
+        '/templates/credentials_reset.html',
+        '/manifest.json',
+      ],
+    },
+    {
+      id: 'SESS-6120',
+      project: 'SANDBOX-STRESS-TEST',
+      target: 'LAB-DOCKER-NODE (127.0.0.1:8888)',
+      started: '09:05:40 UTC',
+      duration: '00:04:15',
+      status: 'TERMINATED',
+      commands: [
+        'systest run --unconfined-check',
+      ],
+      logs: [
+        { timestamp: '09:05:40', text: '[INIT] Inicialização sob monitoramento estrito.', level: 'info' },
+        { timestamp: '09:09:55', text: '[ABORT] Sinal SIGTERM recebido do operador.', level: 'warn' },
+      ],
+      modifiedFiles: [
+        '/configs/stress_test.yaml',
+      ],
+    },
+  ]);
+
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('SESS-8421');
+  const [replaying, setReplaying] = useState(false);
+
+  const selectedSession = sessionList.find((s) => s.id === selectedSessionId) || sessionList[0];
+
+  // Iniciar Nova Sessão
+  const handleSpawnNewSession = () => {
+    const newId = 'SESS-' + Math.floor(1000 + Math.random() * 9000);
+    const newSess: DetailedSession = {
+      id: newId,
+      project: activeProject.name,
+      target: `${activeTarget.name} (${activeTarget.address})`,
+      started: new Date().toLocaleTimeString() + ' UTC',
+      duration: '00:00:01',
+      status: 'RUNNING',
+      commands: ['systest validate', 'systest run'],
+      logs: [
+        { timestamp: new Date().toLocaleTimeString(), text: `[INIT] Sessão ${newId} criada para ${activeProject.name}.`, level: 'info' },
+      ],
+      modifiedFiles: ['/manifest.json', '/scripts/main.sh'],
     };
-    sessions.unshift(newSess);
-    setActiveSessionId(id);
-    addNotification('Sessão Iniciada', `Sessão de laboratório ${id} registrada.`, 'success');
+    setSessionList([newSess, ...sessionList]);
+    setSelectedSessionId(newId);
+    addNotification('Sessão Criada', `Nova sessão de auditoria ${newId} iniciada.`, 'success');
+  };
+
+  // Ação: Replay da Sessão
+  const handleReplaySession = () => {
+    setReplaying(true);
+    addNotification('Replay Iniciado', `Reproduzindo sequência de comandos da sessão ${selectedSession.id}...`, 'info');
+    setTimeout(() => {
+      setReplaying(false);
+      addNotification('Replay Concluído', `Todos os passos da sessão ${selectedSession.id} foram simulados com êxito.`, 'success');
+    }, 1500);
+  };
+
+  // Ação: Encerrar Sessão
+  const handleTerminateSession = () => {
+    setSessionList((prev) =>
+      prev.map((s) => (s.id === selectedSession.id ? { ...s, status: 'TERMINATED' } : s))
+    );
+    addNotification('Sessão Encerrada', `Sessão ${selectedSession.id} finalizada com SIGTERM.`, 'warning');
+  };
+
+  // Ação: Exportar Relatório
+  const handleExportSessionReport = () => {
+    const reportData = {
+      sessionId: selectedSession.id,
+      project: selectedSession.project,
+      target: selectedSession.target,
+      started: selectedSession.started,
+      duration: selectedSession.duration,
+      status: selectedSession.status,
+      commands: selectedSession.commands,
+      logs: selectedSession.logs,
+      modifiedFiles: selectedSession.modifiedFiles,
+      exportedAt: new Date().toISOString(),
+    };
+
+    const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-session-${selectedSession.id.toLowerCase()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    addNotification('Relatório Exportado', `Auditoria da sessão ${selectedSession.id} salva em JSON.`, 'success');
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full watson-grid-bg bg-black overflow-hidden font-sans text-zinc-300">
+    <div className="flex-1 flex flex-col h-full bg-[#040609] overflow-hidden font-mono text-zinc-300 select-none">
       {/* Top Banner */}
-      <div className="h-16 px-6 border-b border-[#18202f] bg-[#090c13] flex items-center justify-between shrink-0 select-none">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
-            <Clock className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-white text-sm tracking-wide font-mono uppercase">SESSÕES DE LABORATÓRIO</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-mono font-semibold">
-                {sessions.length} GRAVAÇÕES
-              </span>
-            </div>
-            <p className="text-[11px] text-zinc-400">Rastreabilidade, telemetria de conexões e trilhas de auditoria para treinos.</p>
-          </div>
+      <div className="h-12 px-4 border-b border-[#161f2e] bg-[#070a10] flex items-center justify-between shrink-0 text-xs">
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4 text-cyan-400" />
+          <span className="text-cyan-400 font-bold uppercase text-[11px]">
+            GERENCIADOR DE SESSÕES & AUDITORIA
+          </span>
+          <span className="text-zinc-600">•</span>
+          <span className="text-zinc-400 text-[11px] font-sans">
+            Trilhas completas de execução e telemetria forense
+          </span>
         </div>
 
         <button
-          onClick={handleSpawnSession}
-          className="px-4 py-2 rounded-full bg-[#f59e0b] hover:bg-[#d97706] text-black font-bold text-xs flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)] font-mono"
+          onClick={handleSpawnNewSession}
+          className="px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold flex items-center gap-1.5 transition-colors shadow-sm text-xs"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>Iniciar Nova Sessão</span>
+          <span>INICIAR NOVA SESSÃO</span>
         </button>
       </div>
 
-      {/* Main 2-Pane: Table + Event Timeline */}
+      {/* Main Split: Left Sessions List + Right Session Details */}
       <div className="flex-1 flex min-h-0">
-        {/* LEFT: Sessions Table */}
-        <div className="flex-1 overflow-y-auto p-5 border-r border-[#18202f] space-y-4">
-          <div className="border border-[#18202f] rounded-2xl overflow-hidden bg-[#090c13] shadow-md font-mono">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#0e131d] border-b border-[#18202f] text-[10px] text-zinc-400 uppercase tracking-wider">
-                  <th className="py-3 px-4">ID Sessão</th>
-                  <th className="py-3 px-4">Projeto</th>
-                  <th className="py-3 px-4">Alvo</th>
-                  <th className="py-3 px-4">Início</th>
-                  <th className="py-3 px-4">Duração</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#151c2a]">
-                {sessions.map((sess) => {
-                  const isSelected = sess.id === activeSessionId;
-                  return (
-                    <tr
-                      key={sess.id}
-                      onClick={() => setActiveSessionId(sess.id)}
-                      className={`cursor-pointer transition-colors ${
-                        isSelected ? 'bg-[#111724]' : 'hover:bg-[#0c1018]'
-                      }`}
-                    >
-                      <td className="py-3 px-4 font-bold text-white flex items-center gap-2">
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            sess.status === 'ACTIVE'
-                              ? 'bg-emerald-400 animate-pulse'
-                              : sess.status === 'PAUSED'
-                              ? 'bg-amber-400'
-                              : 'bg-zinc-600'
-                          }`}
-                        />
-                        <span>{sess.id}</span>
-                      </td>
-                      <td className="py-3 px-4 text-zinc-300">{sess.projectId}</td>
-                      <td className="py-3 px-4 text-cyan-300 font-semibold">{sess.targetId}</td>
-                      <td className="py-3 px-4 text-zinc-500 text-[11px]">{sess.started}</td>
-                      <td className="py-3 px-4 text-zinc-300">{sess.duration}</td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`text-[9px] px-2 py-0.5 rounded-full font-semibold ${
-                            sess.status === 'ACTIVE'
-                              ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                              : sess.status === 'PAUSED'
-                              ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                              : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700'
-                          }`}
-                        >
-                          {sess.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          {sess.status === 'ACTIVE' && (
-                            <button
-                              onClick={() => stopSession(sess.id)}
-                              className="p-1.5 rounded-lg hover:bg-[#1a2334] text-amber-400"
-                              title="Pausar Sessão"
-                            >
-                              <Square className="w-3.5 h-3.5 fill-amber-400/20" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => {
-                              const text = JSON.stringify(sess, null, 2);
-                              const blob = new Blob([text], { type: 'application/json' });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement('a');
-                              a.href = url;
-                              a.download = `${sess.id}-report.json`;
-                              a.click();
-                              URL.revokeObjectURL(url);
-                              addNotification('Exportado', `Log de eventos de ${sess.id} exportado.`, 'success');
-                            }}
-                            className="p-1.5 rounded-lg hover:bg-[#1a2334] text-cyan-400"
-                            title="Exportar Trilha de Auditoria"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => deleteSession(sess.id)}
-                            className="p-1.5 rounded-lg hover:bg-[#1a2334] text-rose-400"
-                            title="Remover Sessão"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        {/* LEFT: Lista de Sessões (ID, Projeto, Alvo, Início, Duração, Status) */}
+        <div className="w-1/2 border-r border-[#161f2e] flex flex-col bg-[#05070c]">
+          <div className="h-9 px-3 border-b border-[#141b27] bg-[#070a10] flex items-center justify-between text-[10px] text-zinc-500 uppercase font-bold">
+            <span>SESSÕES REGISTRADAS ({sessionList.length})</span>
+            <span>ORDENADO POR: RECENTES</span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto divide-y divide-[#101622]">
+            {sessionList.map((sess) => {
+              const isSelected = sess.id === selectedSessionId;
+
+              let statusBadge = 'bg-zinc-800 text-zinc-400 border-zinc-700';
+              if (sess.status === 'RUNNING') statusBadge = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
+              if (sess.status === 'FINISHED') statusBadge = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+              if (sess.status === 'TERMINATED') statusBadge = 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+
+              return (
+                <div
+                  key={sess.id}
+                  onClick={() => setSelectedSessionId(sess.id)}
+                  className={`p-3 cursor-pointer transition-colors ${
+                    isSelected
+                      ? 'bg-[#0f1726] border-l-2 border-l-amber-400 text-white'
+                      : 'hover:bg-[#090d14] text-zinc-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between pb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-xs">{sess.id}</span>
+                      <span className={`text-[9px] px-1.5 py-0.2 rounded border font-bold uppercase ${statusBadge}`}>
+                        {sess.status}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-zinc-500">{sess.started}</span>
+                  </div>
+
+                  <div className="text-xs text-amber-300 font-bold truncate mt-0.5">
+                    {sess.project}
+                  </div>
+
+                  <div className="text-[11px] text-zinc-400 truncate mt-0.5">
+                    Alvo: <span className="text-cyan-300">{sess.target}</span>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between text-[10px] text-zinc-500 pt-1 border-t border-[#121926]">
+                    <span>Duração: <strong className="text-white">{sess.duration}</strong></span>
+                    <span>{sess.commands.length} comandos • {sess.modifiedFiles.length} arquivos</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* RIGHT: Session Event Timeline */}
-        <div className="w-96 bg-[#080b12] border-l border-[#18202f] flex flex-col shrink-0">
-          <div className="px-5 py-3.5 border-b border-[#18202f] bg-[#0c1018] flex items-center justify-between">
-            <span className="font-bold text-xs text-white tracking-wide font-mono uppercase">LINHA DO TEMPO DE EVENTOS</span>
-            {activeSession && (
-              <span className="text-[11px] text-amber-400 font-mono font-semibold">[{activeSession.id}]</span>
-            )}
+        {/* RIGHT: Detalhes da Sessão:
+            - Comandos executados
+            - Logs gerados
+            - Arquivos modificados
+            - Ações: 'Replay da Sessão', 'Encerrar Sessão', 'Exportar Relatório' */}
+        <div className="w-1/2 flex flex-col bg-[#06080e] overflow-y-auto">
+          {/* Top Actions for Selected Session */}
+          <div className="p-3 border-b border-[#141b27] bg-[#070a10] flex items-center justify-between shrink-0">
+            <div>
+              <span className="text-[10px] text-zinc-500 uppercase font-bold">DETALHES DA SESSÃO</span>
+              <div className="font-bold text-white text-xs flex items-center gap-2 mt-0.5">
+                <span>{selectedSession.id}</span>
+                <span className="text-zinc-600">•</span>
+                <span className="text-cyan-400">{selectedSession.project}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs">
+              {/* Replay da Sessão */}
+              <button
+                onClick={handleReplaySession}
+                disabled={replaying}
+                className="px-2.5 py-1 rounded bg-[#0c121c] hover:bg-[#152030] text-cyan-300 border border-cyan-800/40 font-bold flex items-center gap-1 transition-colors text-xs"
+                title="Reproduzir comandos no terminal"
+              >
+                <RotateCcw className={`w-3 h-3 ${replaying ? 'animate-spin' : ''}`} />
+                <span>Replay</span>
+              </button>
+
+              {/* Encerrar Sessão */}
+              {selectedSession.status === 'RUNNING' && (
+                <button
+                  onClick={handleTerminateSession}
+                  className="px-2.5 py-1 rounded bg-[#0c121c] hover:bg-rose-950/40 text-rose-300 border border-rose-800/40 font-bold flex items-center gap-1 transition-colors text-xs"
+                >
+                  <Square className="w-3 h-3 fill-rose-400" />
+                  <span>Encerrar</span>
+                </button>
+              )}
+
+              {/* Exportar Relatório */}
+              <button
+                onClick={handleExportSessionReport}
+                className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold flex items-center gap-1 transition-colors text-xs shadow-sm"
+              >
+                <Download className="w-3 h-3" />
+                <span>Exportar Relatório</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 font-mono">
-            {activeSession && activeSession.events.length > 0 ? (
-              activeSession.events.map((ev) => {
-                let icon = <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0" />;
-                if (ev.severity === 'success') {
-                  icon = <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />;
-                } else if (ev.severity === 'warn') {
-                  icon = <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />;
-                }
-
-                return (
-                  <div
-                    key={ev.id}
-                    className="p-3 rounded-xl bg-[#0e131e] border border-[#1a2232] text-xs space-y-1.5 shadow-sm"
-                  >
-                    <div className="flex items-center justify-between text-[10px] text-zinc-500">
-                      <div className="flex items-center gap-1.5">
-                        {icon}
-                        <span className="font-semibold text-white">[{ev.type}]</span>
-                      </div>
-                      <span>{ev.timestamp}</span>
-                    </div>
-                    <p className="text-zinc-400 text-[11px] leading-relaxed font-sans">{ev.message}</p>
+          <div className="p-4 space-y-4 text-xs">
+            {/* 1. Comandos Executados */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] text-zinc-500 uppercase font-bold flex items-center gap-1.5">
+                <Terminal className="w-3.5 h-3.5 text-amber-400" />
+                <span>COMANDOS EXECUTADOS NA SESSÃO</span>
+              </span>
+              <div className="p-2.5 rounded bg-[#040608] border border-[#162030] space-y-1 font-mono text-xs">
+                {selectedSession.commands.map((cmd, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-zinc-200">
+                    <span className="text-zinc-600 select-none">$&nbsp;</span>
+                    <span className="text-cyan-300">{cmd}</span>
                   </div>
-                );
-              })
-            ) : (
-              <div className="text-zinc-600 text-center p-8 text-xs font-sans">Nenhum evento registrado nesta sessão.</div>
-            )}
+                ))}
+              </div>
+            </div>
+
+            {/* 2. Arquivos Modificados */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] text-zinc-500 uppercase font-bold flex items-center gap-1.5">
+                <FileCode className="w-3.5 h-3.5 text-cyan-400" />
+                <span>ARQUIVOS MODIFICADOS</span>
+              </span>
+              <div className="p-2.5 rounded bg-[#040608] border border-[#162030] space-y-1 font-mono text-xs">
+                {selectedSession.modifiedFiles.map((file, idx) => (
+                  <div key={idx} className="text-emerald-400 flex items-center gap-1.5">
+                    <span>•</span>
+                    <span>{file}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. Logs Gerados */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] text-zinc-500 uppercase font-bold flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-purple-400" />
+                <span>LOGS E TELEMETRIA GERADOS</span>
+              </span>
+              <div className="p-2.5 rounded bg-[#040608] border border-[#162030] space-y-1.5 font-mono text-[11px] max-h-56 overflow-y-auto">
+                {selectedSession.logs.map((log, idx) => {
+                  let color = 'text-zinc-300';
+                  if (log.level === 'warn') color = 'text-amber-300';
+                  if (log.level === 'success') color = 'text-emerald-400';
+                  if (log.level === 'error') color = 'text-rose-400';
+
+                  return (
+                    <div key={idx} className="flex items-start gap-2 leading-relaxed">
+                      <span className="text-zinc-600 select-none shrink-0">{log.timestamp}</span>
+                      <span className={color}>{log.text}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </div>

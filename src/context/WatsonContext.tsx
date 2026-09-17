@@ -99,12 +99,17 @@ interface WatsonContextType {
   newProjectModalOpen: boolean;
   setNewProjectModalOpen: (open: boolean) => void;
   telemetry: { cpu: number; ram: string; uptime: string };
+  bottomDockOpen: boolean;
+  setBottomDockOpen: (open: boolean) => void;
+  bottomDockTab: 'terminal' | 'output' | 'events';
+  setBottomDockTab: (tab: 'terminal' | 'output' | 'events') => void;
+  toggleBottomDock: () => void;
 }
 
 const WatsonContext = createContext<WatsonContextType | undefined>(undefined);
 
 export const WatsonProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [activeView, setActiveView] = useState<ViewMode>('corporate-search');
+  const [activeView, setActiveView] = useState<ViewMode>('dashboard');
   const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
   const [activeProjectId, setActiveProjectId] = useState<string>(INITIAL_PROJECTS[0].id);
   const [targets, setTargets] = useState<LabTarget[]>(INITIAL_TARGETS);
@@ -116,6 +121,10 @@ export const WatsonProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus>('ready');
   const [pipelineProgress, setPipelineProgress] = useState<number>(100);
+
+  const [bottomDockOpen, setBottomDockOpen] = useState<boolean>(false);
+  const [bottomDockTab, setBottomDockTab] = useState<'terminal' | 'output' | 'events'>('terminal');
+  const toggleBottomDock = () => setBottomDockOpen((prev) => !prev);
 
   const [templateComponents, setTemplateComponents] = useState<TemplateComponent[]>(INITIAL_TEMPLATE_COMPONENTS);
   const [selectedTemplateComponentId, setSelectedTemplateComponentId] = useState<string | null>('cmp-1');
@@ -578,17 +587,88 @@ export const WatsonProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const trimmed = rawCmd.trim();
     if (!trimmed) return;
 
-    appendTerminalLine(`watson@lab:~/projects/${activeProject.name}$ ${trimmed}`, 'command');
+    appendTerminalLine(`systest@kali-lab:~/projects/${activeProject.name.toLowerCase()}$ ${trimmed}`, 'command');
     const parts = trimmed.split(' ');
     const cmd = parts[0].toLowerCase();
-    const arg1 = parts[1];
+    const arg1 = parts[1]?.toLowerCase();
+    const arg2 = parts[2];
+
+    if (cmd === 'systest') {
+      if (!arg1 || arg1 === 'help') {
+        appendTerminalLine('┌── SYSTEST WORKSTATION CLI (KALI-LAB) ──────────────────────────┐', 'system');
+        appendTerminalLine('│ systest run              - Compilar e disparar artefato no lab  │', 'system');
+        appendTerminalLine('│ systest build            - Compilar pacote e gerar SHA-256      │', 'system');
+        appendTerminalLine('│ systest validate         - Checar conformidade, regras e airgap │', 'system');
+        appendTerminalLine('│ systest scan             - Inspeção profunda de entropia e AST  │', 'system');
+        appendTerminalLine('│ systest target list      - Listar nós e alvos do laboratório    │', 'system');
+        appendTerminalLine('│ systest target set <id>  - Definir nó como alvo operacional     │', 'system');
+        appendTerminalLine('└─────────────────────────────────────────────────────────────────┘', 'system');
+        return;
+      }
+
+      if (arg1 === 'run') {
+        runBuild();
+        return;
+      }
+      if (arg1 === 'build') {
+        runBuild();
+        return;
+      }
+      if (arg1 === 'validate') {
+        runValidation();
+        return;
+      }
+      if (arg1 === 'scan') {
+        runAnalysis();
+        return;
+      }
+      if (arg1 === 'target') {
+        if (arg2 === 'list' || !arg2) {
+          targets.forEach((t) => {
+            appendTerminalLine(`[${t.status === 'ONLINE' ? '+' : '-'}] ${t.name.padEnd(18)} ${t.address.padEnd(16)} (${t.type}) - ${t.status}`, t.status === 'ONLINE' ? 'success' : 'warn');
+          });
+          return;
+        }
+        if (arg2 === 'set') {
+          const targetId = parts[3];
+          const found = targets.find((t) => t.id === targetId || t.name.toLowerCase() === targetId?.toLowerCase());
+          if (found) {
+            setActiveTarget(found);
+            appendTerminalLine(`[+] Alvo ativo configurado para ${found.name} (${found.address})`, 'success');
+          } else {
+            appendTerminalLine(`[-] Alvo '${targetId}' não encontrado. Use 'systest target list'.`, 'error');
+          }
+          return;
+        }
+      }
+    }
+
+    if (cmd === 'ping') {
+      const tgt = arg1 || activeTarget.address;
+      appendTerminalLine(`PING ${tgt} 56(84) bytes of data (Airgap Loopback Simulation):`, 'output');
+      appendTerminalLine(`64 bytes from ${tgt}: icmp_seq=1 ttl=64 time=1.24 ms`, 'output');
+      appendTerminalLine(`64 bytes from ${tgt}: icmp_seq=2 ttl=64 time=0.98 ms`, 'output');
+      appendTerminalLine(`--- ${tgt} ping statistics --- 2 packets transmitted, 2 received, 0% packet loss`, 'success');
+      return;
+    }
 
     switch (cmd) {
       case 'help':
       case 'ajuda':
-        appendTerminalLine('┌── COMANDOS DO WATSON TOOLKIT ───────────────────────────────────┐', 'system');
+        appendTerminalLine('┌── SYSTEST COMANDOS & SEGURANÇA ────────────────────────────────┐', 'system');
+        appendTerminalLine('│ systest <run|build|validate|scan|target>                       │', 'system');
+        appendTerminalLine('│ ping <target>         - Disparar ICMP echo para o alvo          │', 'system');
         appendTerminalLine('│ validate / validar    - Executar análise de sintaxe e sandbox   │', 'system');
         appendTerminalLine('│ build / compilar      - Compilar artefato e calcular sha256     │', 'system');
+        appendTerminalLine('│ preview / previa      - Abrir modal de prévia isolada           │', 'system');
+        appendTerminalLine('│ analyze / analisar    - Rodar inspeção profunda e entropia      │', 'system');
+        appendTerminalLine('│ export / exportar     - Empacotar artefato para alvo ativo      │', 'system');
+        appendTerminalLine('│ ls                    - Listar arquivos na árvore do workspace  │', 'system');
+        appendTerminalLine('│ cat <arquivo>         - Exibir conteúdo do arquivo no sandbox   │', 'system');
+        appendTerminalLine('│ clear / limpar        - Limpar a tela do terminal               │', 'system');
+        appendTerminalLine('│ whoami / id           - Exibir token de segurança do operador   │', 'system');
+        appendTerminalLine('└─────────────────────────────────────────────────────────────────┘', 'system');
+        break;
         appendTerminalLine('│ preview / previa      - Abrir modal de prévia isolada           │', 'system');
         appendTerminalLine('│ analyze / analisar    - Rodar inspeção profunda e entropia      │', 'system');
         appendTerminalLine('│ export / exportar     - Empacotar artefato para alvo ativo      │', 'system');
@@ -822,6 +902,11 @@ export const WatsonProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         newProjectModalOpen,
         setNewProjectModalOpen,
         telemetry,
+        bottomDockOpen,
+        setBottomDockOpen,
+        bottomDockTab,
+        setBottomDockTab,
+        toggleBottomDock,
       }}
     >
       {children}
